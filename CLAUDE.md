@@ -34,7 +34,7 @@ NOTES exp. 10).
 
 ## Rules
 
-1. Bend is pinned to **2.0.35** (and Lean 4.34.0 for `--verdict`). Bend 2 changes fast and differs from
+1. Bend is pinned to **2.0.36** (and Lean 4.34.0 for `--verdict`). Bend 2 changes fast and differs from
    Bend 1: before writing code, read `bend guide`, `bend base <name>` and the Base source
    (`~/.bend/bend2/base.bend`). A version bump goes in `NOTES.md`.
 2. Run the checker on every change; it takes a fraction of a second.
@@ -55,7 +55,7 @@ NOTES exp. 10).
    stays in the third person: it tells agents whose decisions are whose. Drafts already posted upstream and
    dated entries are left as written.
 
-## Bend 2.0.35 pitfalls we paid for
+## Bend 2.0.36 pitfalls we paid for
 
 - `match` only inspects a parameter or a pattern variable; a computed value (including a destructuring
   `let` of a call) needs its own def or a parameter computed by the caller.
@@ -77,7 +77,8 @@ NOTES exp. 10).
 - `Array` is a plain ADT (`ALeaf`/`ANode`): matching an owned array hands out its halves in O(1) and is
   safe; `Array.clone` is O(n); `Array.fork` is `@unsafe`. Indexes wrap around, so never write past a
   capacity.
-- An `import ... as M` does not re-export, so a publishable package is one file.
+- An `import ... as M` does not re-export. A BendHub package can hold several files (users import each one as
+  `pkg@ver/file.bend`; NOTES 2026-10-10, lead 5), but then every caller must import every file it uses.
 
 ## Agent skills
 

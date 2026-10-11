@@ -4,7 +4,7 @@ Date: 2026-10-03. Everything below was verified on the machine or in a primary s
 
 ## Pinned version
 
-- **Bend 2.0.35** (`bend version`). Pin this version until further notice.
+- **Bend 2.0.36** (`bend version`), since 2026-10-10 (2.0.35 before). Pin this version until further notice.
 - Official repository: `github.com/bendlang/bend` (not `HigherOrderCO/Bend`, which is Bend 1).
 - Installed with `curl -fsSL https://bend-lang.com/install.sh | sh` (script read before running: it downloads the GitHub release, checks the SHA256, installs only into `~/.bend`, no sudo).
 - Update: `bend update` (runs the installer again). Do not update without recording it here, since Bend 2 changes fast.
@@ -675,3 +675,152 @@ bench shows the list API with one band within a few percent of `Mat.matmul_nt`, 
 - **Open:** ~2% on one thread against v1.0. Skipping the clone of `x` gave 0.6%, within noise.
 - A correction: I first read a drop of the peak *virtual* size (41 GB → 10.6 GB) as an effect of the fix; it came
   from a shorter prompt. With the same prompt v1.1, v1.2 and v1.2.1 all reserve 41 GB.
+
+## Next: llama.bend (2026-10-09)
+
+I started step 1 of my plans after v1.2 in its own private repository, `nuxyel/llama.bend`: SmolLM2-135M in
+Bend, using `bend-ml-tensor-array@0.1.6.0` and `bend-ml-bpe-tokenizer@0.1.2.0` from BendHub. Its findings live in
+its own `NOTES.md`; bend-ml's README will mention it when it goes public.
+
+## Leads from Stelliferous v0.0.2 (2026-10-10)
+
+kazzzz520 renamed Bend-Conv to Stelliferous and published v0.0.2 on BendHub (`stelliferous@0.0.2.0`;
+[post](https://x.com/kazzzz520/status/2108962063846645902), repository read at `ad83301`). YOLOv5n forward in
+110 ms on one thread and 43 ms on four (PyTorch 49 and 15 ms; EPYC 9B45, Bend 2.0.36, Clang 19). I quoted it
+([post](https://x.com/nuxyel/status/2108968007506513990)). Nothing below is measured on bend-ml yet; each item is
+a lead to test, with where it comes from.
+
+1. **Leaf work as a fork-free task** (their `docs/toolchain_rules.md`, rule H4). In the grow turn a worker that
+   reaches a leaf inlined into the forking recursion runs that whole leaf there, so four leaves take the time of
+   two. Their remedy: the parallel let calls a def that neither forks nor calls a closure (bit 2 of its row in
+   the `FID_T` table; their `scripts/toolchain_rules/fork_flags.py` prints it), with the hot loop in a flat def
+   one level below (rule F6: a def called directly by a parallel let becomes a task, so its loop is a worklist
+   self-jump, not a C loop). They measured 171 → 121 ms at four threads. This may explain exp. 11's "2 bands
+   never helped" and the 1.6x of 4 bands on 4 threads. Test: read `bmv`'s emitted C for which tasks are fork-free
+   and where the band loop sits, move the leaf behind a fork-free def, rerun `bench/mv_bands.py` at 2, 4 and 16
+   threads with 2^1 to 2^5 bands; bit-identity must hold since the kernel does not change.
+2. **Clang vectorizes 8-wide records** (their `lib/tensor_lanes.bend`, `Tile8`). There is no SIMD type in Bend;
+   they read 8 values into a flat record, write the 8 operations out, and write them back, compiled with
+   `-O3 -march=native -ffp-contract=off`. Their GEMM is 4 output channels by 8 positions with local
+   accumulators. Test on `gemm`'s inner dot: 8 partial sums instead of one. It changes the summation order, so
+   `Bands.matvec` stays equal to `Mat.matmul_nt` only if both change together, and the PyTorch comparisons must
+   stay within their tolerances. First check which C flags `bend` passes and whether they can be set.
+3. **Inlining of small `spin_N` chains** (rule F7) and **shared constructors** (G2, G3): a helper inlined in a
+   small program can become a real call per element once more operations are linked, and a value used twice can
+   make every constructor of its type shared. Every build prints `N of M constructors shared`; record it for the
+   GPT-2 demo and the bench.
+4. **Own `exp`/`tanh`/`log` in F32** (their `lib/math_fp32.bend`): Cephes/Chebyshev polynomials with F32
+   coefficients, special cases by bit selection, checked against MPFR over every F32 input (max 0.8 ULP for
+   `exp`, 1.06 for `tanh`; their GELU is not accurate yet). For bend-ml: softmax and GELU that do not depend on
+   the C library, and the same exhaustive check (2^32 inputs) for any scalar function I write.
+5. **Multi-file packages on BendHub**: users import one file of a package, `stelliferous@0.0.2.0/tensor_f32.bend`.
+   My rule "a publishable package is one file" came from the missing re-export; importing each file directly
+   avoids it. Worth trying for llama.bend before its files grow.
+6. **`.npy` loading** (their `lib/tensor_file.bend`): blocks of 16384 values through the official `File` effects,
+   bytes gathered into little-endian words. Exp. 13 found the per-byte list to be the cost of my loader, and
+   this reads the same lists, so I expect the same limit; time it on GPT-2's weights before adopting anything.
+7. **Bend 2.0.36** (released 2026-10-07 04:53 UTC) does **not** carry #1377 (merged 12:29 UTC the same day), so
+   the bump checklist above still waits for the next release. 2.0.36 does change the scheduler ("the work pass
+   after a grow runs each lane's own ring", bendlang/bend#1132), which touches lead 1; measure on it before
+   drawing conclusions from 2.0.35 alone.
+
+## Testing the Stelliferous leads on Bend 2.0.35 and 2.0.36 (2026-10-10)
+
+Setup: Bend 2.0.36 installed next to 2.0.35 (release tarball, SHA256 checked against the release; run through a
+wrapper that sets `HOME` to `~/.cache/bend-2.0.36/home`, since the `bend` binary reads `~/.bend` and not
+`BEND_HOME`). The scripts now take `BEND_BIN` (every `reference/` and `bench/` script) and `BEND_PIN`
+(`check_all.py`). Brave was open during the runs (load average 0.5-3, mostly from the builds); every comparison
+alternates its variants in the same session.
+
+- **2.0.36:** `BEND_BIN=… BEND_PIN=2.0.36 make check-full` passes 43/43, `--verdict` included. It still compiles
+  with `clang -std=c11 -O3` (no `-march`), and per-product times match 2.0.35 within noise (tables below).
+  Base gains `Poll` and the `try_` channel and socket operations, and `Chan.send` now answers a `Result`; none of
+  it touches bend-ml.
+
+### Exp. 15: the leaf as a fork-free task (lead 1, negative)
+
+- **Diagnosis:** in the C of `tensor-array/tests/par_bands.bend` the only task of the product is `BMV`, marked
+  "may fork", with the leaf's `gemm` inlined in it: the shape rule H4 warns about. Fork flags read with
+  Stelliferous's `scripts/toolchain_rules/fork_flags.py`.
+- **Change tried:** a node whose two bands are leaves calls `bmv_leaf` (a def that neither forks nor calls a
+  closure) in its parallel let; the C then shows `BMV_LEAF` as fork-free on both versions, and the leaf pair no
+  longer clones `x`. Proofs unchanged.
+- **Result** (`bench/results/exp15-leaf-task-2026-10-10.txt`, list API, 1/2/4/8/16 threads, 2^1 to 2^5 bands,
+  three shapes, both versions; then the logits product with 60 products and 7 runs): old and new agree within
+  ~2% everywhere. The old kernel already scaled: 768 × 768 with 2 bands goes 0.288 → 0.178 ms on 2 threads, and
+  the logits product with 4 bands on 4 threads takes ~7 ms against ~26 ms on one. The effect H4 describes does
+  not show in this kernel; I did not find why. Change reverted, so the package does not change.
+
+### Exp. 16: shared constructors and inlining (lead 3, nothing to fix)
+
+C of `demos/gpt2/fast.bend` (both versions): 128 `spin` functions, all `INLINE`, none `FAR`. 33 of them call
+`ctr_take` (a match on a shared value); the ones with F32 work are list folds (a sum, a sum of squares) over
+vectors of 768 or 3072 numbers. The inner loop of `dotg` has no `ctr_take`. Bend 2.0.35 does not print a
+"constructors shared" line; that line comes from Stelliferous's own launcher.
+
+### Exp. 17: the dot product with rotating accumulators (lead 2)
+
+- **Change tried:** `dotr` keeps 4 (or 8) partial sums and rotates them at every step, so each one gets every
+  4th product; the end sums them pairwise. Still one tail-recursive def; `dotg` calls it, so `gemm`,
+  `Mat.matmul_nt` and the bands all use it and stay equal to each other.
+- **Per product** (`bench/results/exp17-dot-accumulators-2026-10-10.txt`, 5 runs; "native" is the emitted C
+  compiled by hand with `-march=native`, a ceiling that users of `bend` do not get):
+
+| W | bands, threads | current | 4 accumulators | 8 accumulators |
+|---|---|---|---|---|
+| 768 × 768 | 1, 1 | 0.283 ms | 0.249 | 0.308 |
+| 2304 × 768 | 1, 1 | 0.796 | 0.701 | 0.849 |
+| 2304 × 768 | 2^4, 16 | 0.233 | 0.172 | 0.209 |
+| 50257 × 768 | 1, 1 | 24.4 | 23.4 | 25.3 |
+| 50257 × 768 | 2^4, 16 | 4.22 | 3.61 | 3.78 |
+
+  `-march=native` did not help any variant: the loop is bound by the array access of every element (the
+  `blk_loc` check, the index mask, the read), not by the vector width.
+- **GPT-2** (36 passes, alternated 5 times; one thread pinned with `taskset -c 3`): 1 thread 4914 → 4686 ms
+  (median, -4.6%); 16 threads 3798 → 3812 ms (no change).
+- **Numbers:** the 11 prompts give the same ids and text, and the logits move closer to PyTorch: the largest
+  difference drops on 9 of the 11 prompts (for example 5.8e-4 → 2.8e-4, 2.0e-4 → 8e-5). The summation order
+  changes, so the logits are no longer bit for bit those of v1.2.1.
+- **Adopted** (my call, 2026-10-10) with four accumulators, in `bend-ml-tensor-array@0.1.7.0`, together with the bump to
+  Bend 2.0.36. Before that call: Short term: -5% on one thread, nothing on 16 for GPT-2, logits closer to
+  PyTorch. Medium and long term: llama.bend and a training framework would inherit the kernel, and any future
+  proof about the dot product's value would be about this order.
+
+### Lead 4: our own exp and tanh (closed for speed)
+
+Replacing GELU by the identity in a copy of the demo changes 36 passes on one thread from 4832 to 4803 ms
+(medians of 5, within noise), and softmax runs over at most 36 positions. Neither is worth replacing for
+speed; an own `exp`/`tanh` would only matter for results that do not depend on the C library.
+
+### Lead 5: BendHub packages with several files (confirmed)
+
+`import stelliferous@0.0.2.0/math_fp32.bend as M` works on 2.0.35: BendHub stores the whole package directory
+(`~/.bend/lib/<hash>/` holds all of its `.bend` files) and the file's own `./` imports resolve inside it. A
+package can have several files; what Bend lacks is re-export, so a user imports each file they call.
+
+### Lead 6: Stelliferous's `.npy` loader (no gain)
+
+`load_npy` of a 50257 × 768 F32 array (154 MB) takes 4.7-5.3 s, about 30 MB/s. My GPT-2 loader reads the
+498 MB of weights in ~4.2 s, about 120 MB/s, so there is nothing to take for loading.
+
+### Idle measurement for v1.2.2 (2026-10-11)
+
+Nothing else running (one terminal session), AC power, `performance` profile. The 0.1.7.0 candidate is the
+`tensor-array` source of `c2c12d9`, imported locally (it is not published yet); the bench and the demo point to it
+through copies in `.scratch/`.
+
+- **GPT-2** (`bench/results/gpt2-v122-2026-10-11.txt`), v1.2.1 kernel and candidate, each built with Bend 2.0.35
+  and 2.0.36, alternated: 16 threads (7 runs) 3678 / 3671 ms for v1.2.1 and 3564 / 3516 ms for the candidate;
+  1 thread pinned (5 runs) 4962 / 4920 and 4677 / 4678 ms. So 2.0.36 times like 2.0.35, and the candidate is
+  4-5% faster on both thread counts. Peak resident 932 MB (v1.2.1: 936 MB). A first batch of 5 runs right after
+  the builds gave 4161 against 4058 ms on 16 threads, with a wide spread (min 3626); I left it out and reran with
+  more runs.
+- **Per product** (`bench/results/mv_bands-2026-10-11.txt`, against `mv_bands-2026-10-09.txt`, different
+  sessions): `Mat.matmul_nt` on one thread 5-12% faster (logits 31.6 → 27.9 ms); list API with 2^4 bands on 16
+  threads 10-21% faster (logits 4.0 → 3.2 ms).
+- **Compile times** (`bench/results/compile-times-2026-10-11.md`, Bend 2.0.36): 128 layers check in 0.13 s and
+  build in 3.3 s, as on 2.0.35.
+- README, `demos/gpt2/BENCHMARK.md` and `docs/media/numbers.json` updated (the charts do not show the Bend version,
+  so the media were not rendered again).
+- **Published:** `bend-ml-tensor-array@0.1.7.0`, hash `0x373e5f0e1b2ccdc5e9e1fe2004c1644c` (2026-10-11). The GPT-2 demo,
+  `bench/mv_bands*.bend` and the README table now use it; `test_published.py` reads the version from the README.
