@@ -14,7 +14,7 @@ use on BendHub, and a portfolio piece for HOC.
   `docs/v2-plan.md`.
 - `docs/AUDIT.md`: the trust base and what is proved, tested or trusted.
 - `docs/upstream/`: drafts of reports for `bendlang/bend`. Renan posts them.
-- Plans after v3 (llama.bend, a training framework) live in the private repo `nuxyel/bend2-notes`.
+- Plans after v3 (llama.bend, a training framework) live in Renan's private notes, outside this repository.
 - `make check` / `make check-full` (`reference/check_all.py`) is the gate before a commit; CI runs the full
   one on every push to `devel` and `main` and on pull requests.
 
@@ -34,7 +34,7 @@ NOTES exp. 10).
 
 ## Rules
 
-1. Bend is pinned to **2.0.36** (and Lean 4.34.0 for `--verdict`). Bend 2 changes fast and differs from
+1. Bend is pinned to **2.0.37** (and Lean 4.34.0 for `--verdict`). Bend 2 changes fast and differs from
    Bend 1: before writing code, read `bend guide`, `bend base <name>` and the Base source
    (`~/.bend/bend2/base.bend`). A version bump goes in `NOTES.md`.
 2. Run the checker on every change; it takes a fraction of a second.
@@ -55,7 +55,7 @@ NOTES exp. 10).
    stays in the third person: it tells agents whose decisions are whose. Drafts already posted upstream and
    dated entries are left as written.
 
-## Bend 2.0.36 pitfalls we paid for
+## Bend 2.0.37 pitfalls we paid for
 
 - `match` only inspects a parameter or a pattern variable; a computed value (including a destructuring
   `let` of a call) needs its own def or a parameter computed by the caller.
@@ -65,10 +65,10 @@ NOTES exp. 10).
 - Variables are affine; `+x` reuses a `Data` value. A parameter used in a type counts as a use.
 - `%e : P` rewrites: `_` marks where the right-hand side of `e` sits in the current goal, and the new goal
   has the left-hand side there; use `Equal.sym` to go the other way.
-- Parallel lets (`a b = f(..) g(..)`) silently become sequential when the def's **last parameter is
-  erased** (put a runtime parameter after it; fixed upstream by bendlang/bend#1377, not in a release
-  yet), and suffer from non-tail recursive helpers in the fork tree (use tail loops with an accumulator). Check scaling with `--threads 1` against `--threads 16`, and
-  read the emitted C (`bend X.bend -o x.c`) when it does not scale. NOTES exp. 11.
+- Parallel lets (`a b = f(..) g(..)`) suffer from non-tail recursive helpers in the fork tree (use tail
+  loops with an accumulator). Check scaling with `--threads 1` against `--threads 16`, and read the emitted
+  C (`bend X.bend -o x.c`) when it does not scale. (Up to 2.0.36 a parallel let silently became sequential
+  when the def's last parameter was erased, NOTES exp. 11; fixed in 2.0.37 by bendlang/bend#1377.)
 - `IO.fork` gives concurrency, not parallelism: forked computations take turns on one event loop
   (NOTES exp. 12). This is intended; the guide says so since bendlang/bend#1415. Use parallel lets in pure
   code for several cores.

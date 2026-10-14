@@ -4,7 +4,7 @@ Date: 2026-10-03. Everything below was verified on the machine or in a primary s
 
 ## Pinned version
 
-- **Bend 2.0.36** (`bend version`), since 2026-10-10 (2.0.35 before). Pin this version until further notice.
+- **Bend 2.0.37** (`bend version`), since 2026-10-13 (2.0.36 from 2026-10-10, 2.0.35 before). Pin this version until further notice.
 - Official repository: `github.com/bendlang/bend` (not `HigherOrderCO/Bend`, which is Bend 1).
 - Installed with `curl -fsSL https://bend-lang.com/install.sh | sh` (script read before running: it downloads the GitHub release, checks the SHA256, installs only into `~/.bend`, no sudo).
 - Update: `bend update` (runs the installer again). Do not update without recording it here, since Bend 2 changes fast.
@@ -358,7 +358,7 @@ Goal: a stranger can clone the repository, reproduce every claim, and see it ver
 
 Plan: `docs/v3-plan.md`. The launch post (2026-10-05) asked: "dfdx already does compile-time shapes?",
 "compile times on deeper nets?", and kazzzz520 (Bend-Conv) pointed at copying as the real cost of
-parallel work. Plans after v3 (llama.bend, a training framework) are in the private repo `nuxyel/bend2-notes`.
+parallel work. Plans after v3 (llama.bend, a training framework) are in my private notes.
 
 ### Exp. 11: `Bands<r, c>`, matrix · vector in parallel without copying the weights
 
@@ -852,3 +852,36 @@ are retired; the launch video stays linked as the v1.0 video and is rendered onl
 - **Correction (2026-10-11).** Exp. 17 above and the v1.2.2 notes said the largest logit difference drops on 9 of the 11
   prompts. Counted prompt by prompt (the same values), it drops on 10: only "The capital of France is" moves the other way
   (8.0e-5 → 9.0e-5). The worst case over all prompts goes from 5.82e-4 to 3.20e-4.
+
+## Next steps (2026-10-11)
+
+- **Bend 2.0.37**: done on 2026-10-13 (below), except `bmv`'s comment, which waits for the next change to
+  tensor-array's source.
+- **The per-element cost of `Array`.** On every product the time goes to the array access of each element (the depth-
+  bounded descent, the index mask, the load), not to the multiply-add: four partial sums gave 4-5%, eight were slower,
+  and `-march=native` changed nothing (exp. 17). Two directions: storage the C compiler can vectorize (a contiguous leaf
+  of several numbers per access, or a primitive for a dense block), and a read-only borrow of an `Array` across a
+  parallel let, which would remove the per-split clone of the input vector (bendlang/bend#1376, open). Measure each
+  against `bench/mv_bands.py` and the GPT-2 timings before changing a published package.
+- **llama.bend** depends on both: its next step (a key/value cache in flat Arrays) is in its own NOTES.
+
+## Bend 2.0.37 (2026-10-13)
+
+Bend 2.0.37 carries my #1377 (an erased last parameter no longer makes a parallel let sequential) and #1479 (a slow
+grow's forks go to idle threads). The checklist above, step by step:
+
+- **Pin.** `scripts/setup.sh` (version and both SHA256 sums), `check_all.py`, the CI step, the README badge and setup
+  line, the `Bend:` line of each package README, CLAUDE.md and "Pinned version". The Python venv had to be rebuilt: it
+  still pointed at the repository's old path.
+- **Pitfall.** CLAUDE.md and the README's upstream section say the bug is fixed in 2.0.37; the C join check stays.
+- **`bmv`'s comment stays.** It sits in tensor-array's source, which is published as 0.1.7.0: changing a comment would
+  make the repository differ from the package, and a comment alone is not worth a new version. It goes with the next
+  real change to tensor-array. The parameter order it explains is still valid.
+- **`make check-full`: 48/48**, with "Bands.matvec compiles to a parallel join".
+- **GPT-2 timings, the same commit (`124a0aa`) built with 2.0.36 and 2.0.37**, 7 alternated rounds in one session on
+  mains power (the evidence harness, `gpt2` block; medians and interquartile ranges, ms per token): one thread 129.8
+  (121.8-145.9) on 2.0.36 against 130.1 (122.9-134.0) on 2.0.37; 16 threads 111.0 (102.2-118.2) against 117.1
+  (106.3-122.2). No difference beyond the spread. For #1377 that is expected (`bmv` already had the workaround); I did
+  not look further into why #1479 changes nothing here. The 2.0.37 binary is less than half the size (0.41 MB
+  against 0.93 MB).
+- **Packages.** No source changed, so none is republished.

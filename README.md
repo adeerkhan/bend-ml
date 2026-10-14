@@ -5,7 +5,7 @@
 <p align="center">
   <a href="https://github.com/nuxyel/bend-ml/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/nuxyel/bend-ml/ci.yml?branch=main&style=flat-square&label=ci&labelColor=4d4a44&color=7e9a5e" alt="CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-8b83b5?style=flat-square&labelColor=4d4a44" alt="MIT license"></a>
-  <a href="https://bend-lang.com"><img src="https://img.shields.io/badge/Bend-2.0.36-8b83b5?style=flat-square&labelColor=4d4a44" alt="Bend 2.0.36"></a>
+  <a href="https://bend-lang.com"><img src="https://img.shields.io/badge/Bend-2.0.37-8b83b5?style=flat-square&labelColor=4d4a44" alt="Bend 2.0.37"></a>
   <img src="https://img.shields.io/badge/laws%20proved-27-7e9a5e?style=flat-square&labelColor=4d4a44" alt="27 laws proved">
 </p>
 
@@ -86,7 +86,7 @@ Linux x86_64 (or WSL), clang ≥ 14, Python ≥ 3.12, `curl`, ~3 GB of disk, 8 G
 
 ```bash
 git clone https://github.com/nuxyel/bend-ml.git && cd bend-ml
-make setup          # Bend 2.0.36 (SHA256-checked), Lean 4.34.0, Python venv, data; no sudo
+make setup          # Bend 2.0.37 (SHA256-checked), Lean 4.34.0, Python venv, data; no sudo
 make check          # 40 checks, about 1.5 min
 make check-full     # 48 checks with GPT-2 and MNIST, about 6 min
 make media          # regenerate the figures on this page (needs node, ffmpeg, Brave)
@@ -99,7 +99,7 @@ versions; work in progress lives on `devel`.
 
 What this project found in Bend and reported:
 
-- [#1374](https://github.com/bendlang/bend/issues/1374): an erased last parameter made a parallel let sequential. Fixed by my PR [#1377](https://github.com/bendlang/bend/pull/1377).
+- [#1374](https://github.com/bendlang/bend/issues/1374): an erased last parameter made a parallel let sequential. Fixed by my PR [#1377](https://github.com/bendlang/bend/pull/1377), released in Bend 2.0.37.
 - [#1375](https://github.com/bendlang/bend/issues/1375): `IO.fork` does not spread pure work over cores. The guide now says so ([#1415](https://github.com/bendlang/bend/pull/1415)).
 - [#1376](https://github.com/bendlang/bend/issues/1376): a read-only borrow of an `Array` for a parallel let, without `@unsafe`. Open.
 
