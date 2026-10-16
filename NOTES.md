@@ -899,3 +899,41 @@ exists, so the lead is to read several numbers per access. A record of 8 `F32` p
 four rotating sums (the same order of additions), made an isolated 49152x576 product about 3x faster on one thread, and
 clang emitted packed SSE for it (a Codex research run, reproduced here: 313-326 ms against 88-116 ms for 20 products,
 indicative timings). Not integrated or measured in a demo yet.
+
+## Upstream: a dense file read (2026-10-14)
+
+Exp. 13's lever, taken upstream: [bendlang/bend#1573](https://github.com/bendlang/bend/issues/1573) asks for a file read
+into an `Array<U32>` (four little-endian bytes per word) instead of a `List<U32>` with one cell per byte. Draft and repro
+in `docs/upstream/` (`dense-file-read.md`, `read_at_bytes.bend`, `read_at_bytes.c`). The standalone repro, Bend 2.0.37,
+one thread pinned to CPU 3, five alternated runs: reading and summing 384 MiB in 1 MiB blocks takes 1.52-1.57 s with
+`File.read_at` and 56-58 ms with `pread` in C, the same sum. The work per byte is one addition in both, so the gap is
+the list. The gain would be in loading only (llama.bend's 1.7B: 66 s); the cost per token does not change.
+
+## Products in cells of 8 (tensor-array 0.1.8.0; 2026-10-15)
+
+Products with two or more rows pack A's rows and B's columns once into cells of 8 F32 (`T8`), so the inner loop reads 8
+numbers per array access instead of one (the lead of 2026-10-13, checked first with sizes read at run time: 3.0-3.3x on
+an isolated product). The additions keep `dotr`'s order, so every result is the same bits as 0.1.7.0's apart from NaN
+payloads (`tensor-array/tests/t8.bend`); one-row products (`Bands.matvec*`, llama.bend's direct `gemm` calls) keep the
+scalar loop. Result, on an MLP training epoch on MNIST (784-128-10, SGD, batches of 100, 5 alternated rounds): 8.7 to
+4.8 s on one thread, 6.0 to 4.7 s on 16; the exact outputs of that training program and of llama.bend unchanged. A first version that built each
+cell through a list was 2.3x slower than 0.1.7.0: packing has to read the 8 numbers directly. The parallel path still
+copies its operands per block (next: B2).
+
+- Published: `bend-ml-tensor-array@0.1.8.0`, hash `0x3283e28131a46d2d98db11347f49016c` (`--verdict` ok, no `@unsafe`). From a
+  clean folder, `tests/t8.bend` against the published package gives `0 0 0 0 0 0 0 0`; `reference/test_published.py` ok.
+  `bench/mv_bands*.bend` point at it; `demos/gpt2/fast.bend` waits (it has uncommitted local changes).
+
+## The parallel products without per-block copies (tensor-array 0.1.9.0; 2026-10-15)
+
+The parallel path in cells of 8 copied both packed operands at every node of the fork tree. Now the larger operand
+(A's rows or B's columns, whichever is longer) is packed straight into one piece per block, and the smaller one is
+copied once per node (`2^d - 1` copies); the split is by rows or by columns of C to match. The inner loop also passes
+its four sums as arguments instead of building a record per step. Same bits (`tests/t8.bend`, and the training program's
+exact outputs). The MNIST training epoch, 5 alternated rounds: 4.9 to 3.9 s on one thread, 5.0 to 4.0 s on 16. More threads still add
+little at this size: a 100 x 784 by 784 x 128 product is about 1.3 ms of work, and splitting it in 8 measured 1.5x
+faster at best in isolation (a version where every leaf owns all its data reached 2.8x), so the fork, the packing and
+the writes of C weigh as much as the work. A coarser grain (a whole step, or several products at once) is the lead.
+
+- Published: `bend-ml-tensor-array@0.1.9.0`, hash `0x4b971e2f6428dc3f80dcd5a04dedc5f2` (`--verdict` ok, no `@unsafe`). From a
+  clean folder, `tests/t8.bend` against the published package gives `0 0 0 0 0 0 0 0`; `reference/test_published.py` ok.
