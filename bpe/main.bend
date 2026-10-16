@@ -1,6 +1,6 @@
 # bend-ml-bpe-tokenizer: byte-level BPE with a proved roundtrip.
 #
-#   import bend-ml-bpe-tokenizer@0.1.2.0/main.bend as BPE
+#   import bend-ml-bpe-tokenizer@0.1.3.0/main.bend as BPE
 #
 # A token is a raw byte (B{n}) or the result of a merge rule (M{id}).
 # The table is a list of rules from the oldest to the newest, like GPT-2's
@@ -67,8 +67,10 @@ def merge(+a: Tk, +b: Tk, +c: Tk, +xs: List<&2, Tk>) -> List<&2, Tk>:
   merge.go(xs, peek(a, b, xs), a, b, c)
 
 # applies the rules from the oldest to the newest; `done` keeps the ones already applied
-# (newest first), which is exactly the table that decode needs.
-def encode.go(todo: List<&2, Rule>, done: List<&2, Rule>, xs: List<&2, Tk>) -> List<&2, Tk>:
+# (newest first), which is exactly the table that decode needs. Only the proofs read it, so it
+# is erased (`-done`): the checker keeps it and the compiled program never builds it. Building
+# it cost half of the time to encode (found by Mathews Fernando's bend-lint, dead_accumulator).
+def encode.go(todo: List<&2, Rule>, -done: List<&2, Rule>, xs: List<&2, Tk>) -> List<&2, Tk>:
   match todo:
     case Nil{}:
       xs

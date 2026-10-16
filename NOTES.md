@@ -1007,3 +1007,56 @@ capacity by doubling.
   published tensor-array give their expected lines, and `tests/read_f32.bend` against the published binary-read gives the
   same lines on both lanes; `reference/test_published.py` checks both; `make check-full` 59/59 with the GPT-2 demo on
   both packages from BendHub. Left: the package diagram in the README still shows five packages.
+
+## v1.3.0 (2026-10-16)
+
+A minor release with tensor-array 0.1.10.0 (accumulating products, the capacity by doubling) and the new
+binary-read 0.1.0.0. CI on the release pull request (#10): 59/59.
+
+## The split depth from the work (tensor-array 0.1.11.0; 2026-10-16)
+
+At 8-32 rows against SmolLM2-sized weights the parallel products were slower on 16 threads than on one (B3's
+measurement). A sweep of the three products at depths 0-4 on 16 threads (bend2-lab `experiments/2026-10-16-b8-split`,
+18 shapes from MNIST, the tiny Llama and a SmolLM2-135M fine-tune, 3 rounds) shows two things:
+
+- `matmul` and `matmul_nt` gain only from 2^23 multiply-adds up (100 x 784 x 128: 1.2x at depth 4; 128 x 576 x 1536:
+  2.5x), and mostly at depth 4; depths 1-3 often lose against 0. The best case on 16 threads is 2.5x.
+- `matmul_tn` with a short inner dimension, a weight gradient over a few tokens, loses at every depth: 1536 x 8 x 576
+  takes 2.8 ms sequentially and 7.7-10.2 ms split. Each block hands its rows of C back as a list that is then written
+  into C, a cost per cell of C that 8 or 32 multiply-adds per cell do not pay for.
+
+`split_depth(par, n, m, k)` gives `par` when the product does at least 2^23 multiply-adds and k >= 64, and 0 otherwise;
+the six public products use it, and the kernels keep the depth they are given (so `tests/t8.bend` and `tests/acc.bend`
+still cover every parallel path). The bits do not depend on the depth: `tests/split.bend` checks the rule on its edges
+and par 4 against par 0 on 128 x 100 x 784 for the six products, on 1 and 16 threads. `make check-full` 61/61.
+
+Public API, published 0.1.10.0 against this, 16 threads, 5 rounds, ms per product at par 3: 1536 x 8 x 576 (tn) 9.28 ->
+2.82; 1536 x 32 x 576 (tn) 10.23 -> 5.89; 576 x 32 x 1536 (tn) 6.49 -> 5.83; 8 x 576 x 1536 (nt) 2.18 -> 1.77; 100 x
+128 x 10 (nt) 0.083 -> 0.034; the larger ones unchanged within the spread (1536 x 128 x 576 15.9 -> 16.3, 100 x 784 x 128
+1.39 -> 1.41, 128 x 576 x 1536 8.50 -> 8.50). BendTorch on it: `make check` the same counts, `make bits` identical; an
+MNIST epoch is unchanged (3.60 s on one thread, 3.30 on 16), since both of its large products stay above the threshold.
+Passing par 4 instead of 3 to MNIST's first layer was slower in the whole run (3.50 against 3.30 s on 16 threads), though
+faster in the micro-benchmark, so BendTorch keeps its `par` values. Left: on one thread a caller's `par` still splits.
+
+## BPE encoding 2x faster: an accumulator only the proofs read (bpe-tokenizer 0.1.3.0; 2026-10-16)
+
+Found by Mathews Fernando (@MattCozendey) with his linter, [bend-lint](https://github.com/MattCozendey/bend-lint)
+(rule `performance/dead_accumulator`), which he ran on bend-ml and llama.bend. `encode.go` kept the rules already
+applied in `done`, a list that only grows and that only the proofs (`enc_known`, `enc_dec`) read; at run time it was
+built and freed for every word, up to the whole table. `done` is now erased (`-done`): the checker keeps it for the
+proofs (`--verdict` ok, `roundtrip` and the others unchanged), and the compiled program never builds it.
+
+19 KB of text (the first 19,000 bytes of tiny Shakespeare), one thread pinned to CPU 3, 3 alternated rounds: the GPT-2
+tokenizer 25.2 -> 12.3 s, the SmolLM2 tokenizer (llama.bend's `demo/tok.bend`) 24.9 -> 12.2 s, the same ids. Against
+tiktoken (`reference/test_gpt2_tok.py`) and `tokenizers` (llama.bend's `test_tok.py`, `test_detok.py`): 0 failures.
+`make check-full` 61/61. 
+
+The same run of his linter over the whole repository (performance rules): the other findings are in code that runs
+once or never at run time (`has`, `knl`, `wf.go`, `ids_ok`, the autograd's `Nat` model, the band constructors), or in
+benchmarks and upstream drafts; he measured `missed_fork` on tensor-array and `repeated_call` on the tokenizer as no
+change.
+
+- Published: `bend-ml-bpe-tokenizer@0.1.3.0`, hash `0x559a0abb492a951db15be435191b6d0a`, and `bend-ml-tensor-array@0.1.11.0`,
+  hash `0xcd90bcc8501745cf08bdce89fc915900` (`--verdict` ok for both). From a clean folder, `tests/split.bend` against the
+  published tensor-array gives its expected lines; the demos, the benchmarks and the README point at both, and `make
+  check-full` is 61/61 with the GPT-2 tokenizer against tiktoken on the published 0.1.3.0.
