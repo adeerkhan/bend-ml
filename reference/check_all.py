@@ -49,6 +49,20 @@ def main():
         results.append(clean)
         print(f"{'ok  ' if clean else 'ERROR'} {f}: no @unsafe or ?TODO")
 
+    # 1b. binary-read: the one package with foreign code, kept to one def and out of the packages with laws
+    run("binary-read/main.bend: read_f32 is its only foreign def", [BEND, "binary-read/main.bend"],
+        lambda o, c: "1 def relies on unsafe or foreign code" in o and re.findall(r"^- (\S+)$", o, re.M) == ["read_f32"])
+    laws = [f"{p}/main.bend" for p in ["nat-lemmas", "bpe", "tensor", "tensor-array", "autograd"]]
+    clean = not any("binary-read" in open(os.path.join(ROOT, f)).read() for f in laws)
+    results.append(clean)
+    print(f"{'ok  ' if clean else 'ERROR'} no package with laws imports binary-read")
+    want = "".join(l[3:] for l in open(os.path.join(ROOT, "binary-read/tests/read_f32.bend")) if l.startswith("#| "))
+    run("binary-read/tests/read_f32.bend on the JS lane", [BEND, "binary-read/tests/read_f32.bend"], lambda o, c: o.strip() == want.strip())
+    with tempfile.TemporaryDirectory() as d:
+        rf = os.path.join(d, "rf")
+        run("compile binary-read/tests/read_f32.bend", [BEND, "binary-read/tests/read_f32.bend", "-o", rf])
+        run("binary-read/tests/read_f32.bend on the C lane", [rf], lambda o, c: o.strip() == want.strip())
+
     # 2. shape errors that MUST fail to check
     for f, msg in [("tensor/tests/bad_matmul.bend", "expected"), ("tensor/tests/bad_reshape.bend", "expected"), ("tensor-array/tests/bad_matmul.bend", "expected"), ("tensor-array/tests/bad_grad.bend", "expected"), ("examples/runtime_batch_bad.bend", "expected"), ("examples/symbolic_reshape_bad.bend", "expected"), ("examples/square_transpose_bad.bend", "expected"), ("tensor-array/tests/bad_bands.bend", "expected")]:
         run(f"{f} must be a type error", [BEND, f], lambda o, c, m=msg: "SOME PROOFS FAIL" in o and m in o)
@@ -67,6 +81,12 @@ def main():
         t8 = os.path.join(d, "t8")
         run("compile tensor-array/tests/t8.bend", [BEND, "tensor-array/tests/t8.bend", "-o", t8])
         run("the products in cells of 8 give the scalar loop's bits (tensor-array/tests/t8.bend)", [t8], lambda o, c: o.strip().strip('"') == "0 0 0 0 0 0 0 0")
+        acc = os.path.join(d, "acc")
+        run("compile tensor-array/tests/acc.bend", [BEND, "tensor-array/tests/acc.bend", "-o", acc])
+        run("the accumulating products give the bits of Mat.add(C, A·B) (tensor-array/tests/acc.bend)", [acc], lambda o, c: o.strip().strip('"') == "0 0 0 0 0 0")
+        cap = os.path.join(d, "cap")
+        run("compile tensor-array/tests/cap.bend", [BEND, "tensor-array/tests/cap.bend", "-o", cap])
+        run("cap_depth by doubling equals the n-step cap_pair (tensor-array/tests/cap.bend)", [cap], lambda o, c: o.strip() == "0")
     run("tensor-array/tests/checked.bend rejects wrong label counts", [BEND, "tensor-array/tests/checked.bend"], lambda o, c: o.strip() == "[1n, 0n, 0n, 1n, 0n, 0n]")
 
     # 3. tests against the Python references

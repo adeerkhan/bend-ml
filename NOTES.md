@@ -937,3 +937,73 @@ the writes of C weigh as much as the work. A coarser grain (a whole step, or sev
 
 - Published: `bend-ml-tensor-array@0.1.9.0`, hash `0x4b971e2f6428dc3f80dcd5a04dedc5f2` (`--verdict` ok, no `@unsafe`). From a
   clean folder, `tests/t8.bend` against the published package gives `0 0 0 0 0 0 0 0`; `reference/test_published.py` ok.
+
+## v1.2.5 and v1.2.6 (2026-10-16)
+
+v1.2.5 released the faster products. It also carried, by mistake, a work-in-progress `demos/gpt2/fast.bend` whose loader
+imports a file that is not in the repository, so the GPT-2 demo did not compile. CI did not catch it: the full-checks
+step piped `make check-full` through `tee`, which hid the exit status, and the job passed with 48 of 50 checks. v1.2.6
+puts the demo back to v1.2.4's loader and runs that step with `pipefail`; its CI ran 50/50, including the GPT-2 demo
+against PyTorch. v1.2.5's release notes point to v1.2.6.
+
+## Accumulating products (tensor-array 0.1.10.0; 2026-10-16)
+
+A training loop accumulates its weight gradient, `dW += Xᵀ · dY`, and with the products it had to do that in two steps:
+`Mat.matmul_tn` into a new matrix, then `Mat.add` into the gradient, a second pass over every weight plus an allocation.
+`Mat.matmul_acc`, `Mat.matmul_nt_acc`, `Mat.matmul_tn_acc` and `Mat.col_sums_acc` take the destination and add each cell
+of the product into it. The cell is computed exactly as before and added once, `c + x`, so the result has the bits of
+`Mat.add(c, A·B)`: `tests/acc.bend` checks it word for word on every path (one row, scalar and parallel by columns;
+cells of 8, sequential, parallel by rows and by columns), every layout and every k from 0 to 19, with special values in
+C; `reference/test_tensor_array.py` compares the four functions with NumPy. The code is one flag through the writers of
+C; `gemm` and `gemm_t8` keep their signatures and the other functions their bits.
+
+`dW += dYᵀ·X` repeated, idle machine, 9 alternated rounds, medians, one thread:
+
+| n x o x i | two steps | accumulating | ratio |
+|---|---|---|---|
+| 32 x 1536 x 576 (an MLP projection of SmolLM2-135M, 32 tokens) | 260 ms | 184 ms | 0.71 |
+| 8 x 1536 x 576 | 359 ms | 159 ms | 0.44 |
+| 128 x 1536 x 576 | 176 ms | 152 ms | 0.86 |
+| 100 x 128 x 784 (MNIST's first layer) | 175 ms | 154 ms | 0.88 |
+
+The pass it removes is proportional to the weights and the product to the weights times the rows, so the gain grows as
+the batch shrinks. On an MLP training epoch on MNIST the whole run is 3% faster (4.25 to 4.12 s, 15 rounds). At these
+sizes the parallel product (8 blocks, 16 threads) was slower than one thread for both versions (455 against 260 ms at
+32 x 1536 x 576): with few rows, splitting and joining costs more than it saves.
+
+The same version also changes how a new array's capacity is computed. `cap_depth(n)`, the smallest `d` with
+`n <= 2^d`, came from `cap_pair`, a recursion on `n` (not a tail call) where each step compares two unary numbers, up to
+`n` steps: quadratic in `n` when it runs at run time. In the JavaScript build it overflowed the stack on any array of more
+than ~40,000 numbers, and with a larger stack it was 98% of the time of an MNIST run (247 s for 50 batches against 4.3 s
+with the fix). `cap_dbl` doubles a power of two until it holds `n`, log2(n) steps in a tail loop. Its fuel is `n`,
+always enough; if it ran out the answer would be `cap_pair`'s, so the law `cap_ok` (`n <= 2^cap_depth(n)`) is proved by
+the same lemmas and no arithmetic about the number of doublings (`--verdict` ok). `tests/cap.bend` checks that both give
+the same depth for every `n` up to 2000 and that the depth is the smallest at four large sizes. Native builds gain
+too, a little: an MNIST training epoch 4.26 to 4.19 s on one thread.
+
+
+## binary-read: the weights straight into an Array (2026-10-16)
+
+Exp. 13's lever without waiting for Base. bendlang/bend#1430 proposed a read into an array for Base and was closed:
+Base keeps thin wrappers over system calls. So `binary-read/` is a library effect, `read_f32(file, offset, n, a)`, in C
+(`pread` straight into the array's block) and JavaScript (a buffer viewed as float32). It is foreign code, so
+`--verdict` fails for whatever imports it; `make check` checks that it is the package's only foreign def and that no
+package with laws imports it. The test runs on both lanes and found one difference before it was fixed: on a read cut
+short in the middle of a number, the C lane wrote the bytes it had and the JS lane wrote nothing; both now write the
+bytes over the cell's bits.
+
+GPT-2 small's matrices now load with it (`demos/gpt2/fast.bend`), against the committed loader on the same
+tensor-array 0.1.7.0, idle machine, 5 alternated rounds, medians: weights loaded in 4.7 → 0.8 s on one thread, 4.1 →
+0.6 s on 16; generation unchanged (4.6 s and 3.5 s for 32 tokens); peak memory 1463 → 1416 MB. The output is the same,
+logit for logit, and the 11 prompts match PyTorch as before (`make check-full`: 59/59).
+
+The same morning, the GPT-2 demo built with tensor-array 0.1.7.0, 0.1.9.0 and the local 0.1.10.0 (7 alternated rounds):
+the same output in all 42 runs, the same generation time, and the load 4.7 → 4.3 s on one thread with 0.1.10.0, the
+capacity by doubling.
+
+- Published: `bend-ml-tensor-array@0.1.10.0`, hash `0xbb78793a12728b7aa5a6f9756c65086a` (`--verdict` ok, no `@unsafe`), and
+  `bend-ml-binary-read@0.1.0.0`, hash `0x90859c4c8057ca356750f70618fd2ed4` (4 files: the Bend declaration, the C and the
+  JavaScript effect, the license). From a clean folder, `tests/acc.bend`, `tests/t8.bend` and `tests/cap.bend` against the
+  published tensor-array give their expected lines, and `tests/read_f32.bend` against the published binary-read gives the
+  same lines on both lanes; `reference/test_published.py` checks both; `make check-full` 59/59 with the GPT-2 demo on
+  both packages from BendHub. Left: the package diagram in the README still shows five packages.
