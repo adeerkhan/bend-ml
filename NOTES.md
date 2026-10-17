@@ -1210,3 +1210,8 @@ fixed order, not by reads. Raising the split depth (BendTorch's `par` 4 → 8, 1
 step 763 → 577 ms per 3 steps at 135M, 1840 → 1313 ms at 360M, by balancing the P- and E-cores.
 - Published: `bend-ml-tensor-fork@0.1.1.0`, hash `0x7426570b56a9f08f09fe41b970d661b9`; `reference/test_published.py` now
   imports it from BendHub and checks a split product and `par1` against one block.
+
+## v1.5.0 (2026-10-17)
+
+`bend-ml-tensor-fork` 0.1.1.0 (`par1`..`par4`, packing in blocks, output arrays sized without `cap_depth`), released
+through pull request #14 (CI green).
