@@ -37,12 +37,13 @@ only compiles with a proof that the number of elements does not change, even whe
 | [`bend-ml-nat-lemmas`](nat-lemmas) | 0.1.1.0 | `Nat` and `List` lemmas that Base does not have | `add_comm`, `add_assoc`, `mul_comm`, `mul_assoc`, `mul_dist`, `append_assoc`, `length_append`, `product_append`... (15) |
 | [`bend-ml-bpe-tokenizer`](bpe) | 0.1.3.0 | Byte-level BPE tokenizer (GPT-2 style) | **roundtrip** `decode(encode(s)) = s`, `vocab_bound`, `dec_append`, `train_wf`, `roundtrip_trained` |
 | [`bend-ml-tensor`](tensor) | 0.1.2.0 | `Vec<n>` and `Mat<r,c>` with the shape in the type, over lists | `reshape_swap`, `reshape_flat` |
-| [`bend-ml-tensor-array`](tensor-array) | 0.1.11.0 | the same guarantees over a flat `Array<F32>`; `Bands<r,c>` for a parallel matrix · vector | `cap_ok`, `half_cover`, `leaf_len`, `band_len`; typed `matmul`, `matmul_nt`, `matmul_tn` (and their accumulating forms), `Bands.matvec` |
+| [`bend-ml-tensor-array`](tensor-array) | 0.1.12.0 | the same guarantees over a flat `Array<F32>`; `Bands<r,c>` for a parallel matrix · vector | `cap_ok`, `half_cover`, `leaf_len`, `band_len`; typed `matmul`, `matmul_nt`, `matmul_tn` (and their accumulating forms), `Bands.matvec` |
 | [`bend-ml-autograd`](autograd) | 0.1.1.0 | Automatic differentiation and layers with typed backward | **`reverse_eq_forward`** |
 | [`bend-ml-binary-read`](binary-read) | 0.1.0.0 | F32 weights read from a file straight into an `Array<F32>`; foreign code (C and JavaScript), kept out of the packages with laws | none: an effect, tested on both lanes |
+| [`bend-ml-tensor-fork`](tensor-fork) | 0.1.0.0 | tensor-array's six products with the parallel blocks sharing A, B and C (`Array.fork`, `@unsafe` in Base) instead of copying them: an MNIST epoch 12.0 → 6.2 s on one thread, 4.4 → 3.0 s on 16 | none: the same bits as tensor-array, tested on 14,832 products; kept out of the packages with laws |
 
 ```python
-import bend-ml-tensor-array@0.1.11.0/main.bend as TA
+import bend-ml-tensor-array@0.1.12.0/main.bend as TA
 import bend-ml-bpe-tokenizer@0.1.3.0/main.bend as BPE
 ```
 
@@ -101,6 +102,7 @@ sums changed on purpose):
 | v1.3.0 | `tensor-array` 0.1.10.0: accumulating products (`C + A·B` in place) and array capacities computed by doubling; the new `bend-ml-binary-read` | a weight gradient 0.44–0.88 of the time; GPT-2's weights load in 0.8 s instead of 4.7 |
 | v1.3.1 | `bpe-tokenizer` 0.1.3.0 and `tensor-array` 0.1.11.0: an accumulator only the proofs read is erased; products split into parallel blocks only when the work pays | tokenizing 2x faster (19 KB: 25.2 → 12.3 s); a weight gradient over 8 tokens 3.3x faster on 16 threads |
 | v1.3.2 | the MNIST demo moves from `tensor-array` 0.1.3.0 to 0.1.11.0; the README and its figures measured again | an MNIST epoch 17.9 → 11.9 s on one thread, 7.3 → 4.4 s on 16, the same test hits |
+| v1.4.0 | the new `bend-ml-tensor-fork`: tensor-array's products with the parallel blocks sharing their operands (`@unsafe`, outside the proofs); `tensor-array` 0.1.12.0: a product with one row runs sequentially | an MNIST epoch with tensor-fork 12.0 → 6.2 s on one thread, 4.4 → 3.0 s on 16, the same bits; one row against GPT-2's 50,257 x 768 weights at par 4: 9.5 GB → 565 MB |
 
 Versions are numbered as in [`docs/VERSIONING.md`](docs/VERSIONING.md); each release has its notes on GitHub.
 

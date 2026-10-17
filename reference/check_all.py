@@ -63,6 +63,25 @@ def main():
         run("compile binary-read/tests/read_f32.bend", [BEND, "binary-read/tests/read_f32.bend", "-o", rf])
         run("binary-read/tests/read_f32.bend on the C lane", [rf], lambda o, c: o.strip() == want.strip())
 
+    # 1c. tensor-fork: the one package whose parallel blocks share arrays through Base's @unsafe Array.fork; its unsafe
+    # defs are exactly the fork tree and what reaches it, no package with laws imports it, and it gives tensor-array's bits
+    fork_defs = ["rpar", "cpar", "t8_tree", "t8_go", "gemm_fork", "gemm_rows", "gemm_any2", "gemm_any", "matmul", "matmul_acc",
+                 "matmul_nt", "matmul_nt_acc", "matmul_tn", "matmul_tn_acc"]
+    run("tensor-fork/main.bend: its @unsafe defs are the fork tree and what reaches it", [BEND, "tensor-fork/main.bend"],
+        lambda o, c: f"{len(fork_defs)} defs rely on unsafe or foreign code" in o and re.findall(r"^- (\S+)$", o, re.M) == fork_defs)
+    clean = not any("tensor-fork" in open(os.path.join(ROOT, f)).read() for f in laws)
+    results.append(clean)
+    print(f"{'ok  ' if clean else 'ERROR'} no package with laws imports tensor-fork")
+    with tempfile.TemporaryDirectory() as d:
+        tf = os.path.join(d, "tf")
+        run("compile tensor-fork/tests/bits.bend", [BEND, "tensor-fork/tests/bits.bend", "-o", tf])
+        for t in ["1", "16"]:
+            run(f"tensor-fork gives tensor-array's bits, A and B intact: 14,832 products and the six public ones ({t} threads)",
+                [tf, "--threads", t], lambda o, c: o.split() == ["0", "0", "14832", "0", "0", "0", "0", "0", "0"])
+    if FULL:
+        run("tensor-fork/tests/bits.bend on the JS lane", [BEND, "tensor-fork/tests/bits.bend"],
+            lambda o, c: re.findall(r"^[0-9 ]+$", o, re.M) == ["0 0 14832", "0 0 0 0 0 0"])
+
     # 2. shape errors that MUST fail to check
     for f, msg in [("tensor/tests/bad_matmul.bend", "expected"), ("tensor/tests/bad_reshape.bend", "expected"), ("tensor-array/tests/bad_matmul.bend", "expected"), ("tensor-array/tests/bad_grad.bend", "expected"), ("examples/runtime_batch_bad.bend", "expected"), ("examples/symbolic_reshape_bad.bend", "expected"), ("examples/square_transpose_bad.bend", "expected"), ("tensor-array/tests/bad_bands.bend", "expected")]:
         run(f"{f} must be a type error", [BEND, f], lambda o, c, m=msg: "SOME PROOFS FAIL" in o and m in o)
@@ -91,6 +110,14 @@ def main():
         run("compile tensor-array/tests/split.bend", [BEND, "tensor-array/tests/split.bend", "-o", split])
         run("split_depth picks 0 or par, and par 4 gives par 0's bits (tensor-array/tests/split.bend)", [split, "--threads", "16"],
             lambda o, c: o.strip() == '"0 3 0 0 3 0 4\\n0 0 0 0 0 0"')
+        parseq = os.path.join(d, "parseq")
+        run("compile tensor-array/tests/parseq.bend", [BEND, "tensor-array/tests/parseq.bend", "-o", parseq])
+        run("parallel = sequential: 11,664 products at depths 1-4 give depth 0's bits (tensor-array/tests/parseq.bend)", [parseq, "--threads", "16"],
+            lambda o, c: o.strip() == '"0 11664"')
+        onerow = os.path.join(d, "onerow")
+        run("compile tensor-array/tests/onerow.bend", [BEND, "tensor-array/tests/onerow.bend", "-o", onerow])
+        run("one row at par 4 runs the scalar loop: 50,257 x 768 gives par 0's bits (tensor-array/tests/onerow.bend)", [onerow, "--threads", "16"],
+            lambda o, c: o.strip() == '"0 0 0"')
     run("tensor-array/tests/checked.bend rejects wrong label counts", [BEND, "tensor-array/tests/checked.bend"], lambda o, c: o.strip() == "[1n, 0n, 0n, 1n, 0n, 0n]")
 
     # 3. tests against the Python references

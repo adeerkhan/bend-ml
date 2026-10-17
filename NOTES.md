@@ -1016,7 +1016,7 @@ binary-read 0.1.0.0. CI on the release pull request (#10): 59/59.
 ## The split depth from the work (tensor-array 0.1.11.0; 2026-10-16)
 
 At 8-32 rows against SmolLM2-sized weights the parallel products were slower on 16 threads than on one (B3's
-measurement). A sweep of the three products at depths 0-4 on 16 threads (bend2-lab `experiments/2026-10-16-b8-split`,
+measurement). A sweep of the three products at depths 0-4 on 16 threads (2026-10-16,
 18 shapes from MNIST, the tiny Llama and a SmolLM2-135M fine-tune, 3 rounds) shows two things:
 
 - `matmul` and `matmul_nt` gain only from 2^23 multiply-adds up (100 x 784 x 128: 1.2x at depth 4; 128 x 576 x 1536:
@@ -1077,3 +1077,69 @@ v1.3.2: GPT-2 138.8 ms per token on one thread, 107.1 on 16 (unchanged), the sma
 5.4, peak 831 MB against 1,464 on one thread; MNIST 20.0 ms per batch against 29.9 on one thread, 7.7 against 12.8 on 16,
 peak 107 MB. Every output the same as before. `numbers.json` ("evidence", "rerun_2026_10_16") holds them; the deck
 (`docs/media/deck/readme.mjs`) shows v1.3.2.
+
+## v1.3.2 (2026-10-16)
+
+The MNIST demo on tensor-array 0.1.11.0 and the README measured again (pull request #12, CI 61/61).
+
+## Parallel = sequential, as a property (laws track L1; 2026-10-16)
+
+`tensor-array/tests/parseq.bend` checks that every split depth 1-4 gives depth 0's bits on a grid (n, m 1-9, six values
+of k, three layouts, plain and accumulating): 11,664 products, all equal, in `make check`. Against 8 deliberate faults in
+the split, it caught three the other tests missed (a one-row product's right columns starting at the larger half; empty
+row and column blocks). The reason they were missed: `tests/acc.bend` compares two outputs of the same parallel code,
+and `reference/test_tensor_array.py`'s small shapes have run at depth 0 since `split_depth` (0.1.11.0), so the public
+API's tests no longer reached the parallel paths. A law that the split never changes a bit is the next step (L2).
+
+## One row runs the scalar loop (tensor-array 0.1.12.0; 2026-10-16)
+
+Found while measuring a shared-array matrix · vector (not adopted, below): `Mat.matmul_nt` with one row at `par` 4
+split by columns (`gemm_par_cols`), which clones both operands at every node of the fork tree, 2^(d+1) - 2 copies of the
+weight matrix. One row of 768 against GPT-2's 50,257 x 768 output projection at par 4 ran out of the default heap in a
+benchmark that also held its inputs, and peaked at 9.5 GB in `tests/onerow.bend`; at 8192 x 2048 it took 124 ms on 16
+threads against 10 ms sequentially. The demos never took this route (they use `Bands`), but any caller of the public
+products with one row and a large matrix did.
+
+Two fixes measured, 16 threads, par 4, per product: routing one row to the cells of 8 fixed the crash but packing the
+matrix costs more than the product, which reads each weight once (50,257 x 768: 64.6 ms, 842 MB; the packing was 62% of
+the profile); routing it to the scalar loop at every depth gives 24.4 ms and 268 MB (49,152 x 2048: 62.6 ms and 531 MB
+against 162 ms and 1.6 GB; 8192 x 2048: 9.9 ms and 72 MB against 124 ms and 2.7 GB for the published route), the same
+checksums, and no change at shapes that never split (768 x 768: 0.235 against 0.238 ms). 0.1.12.0 takes the second.
+Matrix · vector in parallel stays `Bands.matvec`.
+
+`tests/onerow.bend`: one row at par 4 against par 0 for `matmul_nt` and `matmul_nt_acc` at 50,257 x 768 and `matmul` at
+1 x 768 x 3072, "0 0 0" (0.56 s and 565 MB on 16 threads; 0.1.11.0 gives the same bits at 2.34 s and 9.5 GB). `make
+check-full` 65/65.
+
+- Published: `bend-ml-tensor-array@0.1.12.0`, hash `0xf94fab1939abde90f6dd66413a7964d8` (`--verdict` ok). From a clean
+  folder, `tests/onerow.bend` and `tests/split.bend` against the published package give their expected lines. The demos,
+  the benchmarks and the README point at it; the demos never multiply one row through `Mat`, so their numbers stand.
+
+Not adopted from the same measurements: a matrix · vector whose operands are shared through Base's `@unsafe`
+`Array.fork` (no clone of x per node, no lists) was 25-36% faster than `Bands` at short rows on 16 threads but not end to
+end (inside llama.bend's generation: -9.9% at SmolLM2-135M, -1.0% at 360M, +13.5% at 1.7B); `Bands` stays. The general
+product over the same fork tree is much faster in training (an MNIST epoch 4.3 → 2.9 s on 16 threads, 11.8 → 6.0 s on
+one, the same loss and hits) but makes a package's check fail (`@unsafe`), so it goes into a separate package outside the
+proved ones, not into tensor-array.
+
+## bend-ml-tensor-fork 0.1.0.0: the products over a shared fork tree, outside the proofs (2026-10-16)
+
+The general product over Base's `@unsafe` `Array.fork`, measured above, as its own package (Renan's decision: the same
+bits and a large gain in training, but `@unsafe`, so outside the packages with laws, as `binary-read` is for foreign
+code). `tensor-fork/main.bend` takes tensor-array 0.1.12.0's `Mat` values and returns its result types; the six products
+keep tensor-array's signatures and go through its `split_depth`. Two or more rows that split: A and B packed once into
+cells of 8, the packed operands and C shared through `Array.fork` down the tree, each leaf running tensor-array's
+`t8_rows`/`t8_cols` into its rows or columns of C (by rows when n >= m, as tensor-array splits). Everything else runs
+tensor-array's sequential code. The GPU route and the one-row tree of the prototype were left out.
+
+- `bend tensor-fork/main.bend`: 14 defs rely on unsafe code, the five of the tree and what reaches it; `make check`
+  pins that list, checks that no package with laws imports it, and runs `tests/bits.bend` at 1 and 16 threads
+  (`make check-full` adds the JS lane, which needs `main` as IO: a pure `main` overflowed the JS stack).
+- `tests/bits.bend`: 14,832 products against tensor-array at depth 0 (every layout, both modes, the `parseq` grid at
+  depths 0-4 and six larger shapes at 0-6), 0 differing words in C and in A and B; the six public products at par 4
+  against tensor-array's at par 0, 0. Three planted faults caught (5,282, 60,557 and 22,740 differing words).
+- MNIST epoch with the demo's seven products from the package, 5 alternated rounds on the idle machine, medians: 12.0 →
+  6.2 s on one thread, 4.4 → 3.0 s on 16, loss 0.52047706 and 9129 hits in every run (two rounds on one thread ran 2 s
+  slower in both builds, a terminal redrawing; the medians match the copy measured earlier, 11.8 → 6.0 and 4.3 → 2.9).
+- Published: `bend-ml-tensor-fork@0.1.0.0`, hash `0xd8eb8357f30e6c7a242507aee97fab7e`. BendHub accepts a package whose
+  check fails on `@unsafe` code. The MNIST timing above already imports the published package.
