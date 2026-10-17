@@ -1143,3 +1143,70 @@ tensor-array's sequential code. The GPU route and the one-row tree of the protot
   slower in both builds, a terminal redrawing; the medians match the copy measured earlier, 11.8 → 6.0 and 4.3 → 2.9).
 - Published: `bend-ml-tensor-fork@0.1.0.0`, hash `0xd8eb8357f30e6c7a242507aee97fab7e`. BendHub accepts a package whose
   check fails on `@unsafe` code. The MNIST timing above already imports the published package.
+
+## v1.4.0 (2026-10-17)
+
+`bend-ml-tensor-fork` 0.1.0.0 (new, outside the proofs) and tensor-array 0.1.12.0 (one row runs sequentially), released
+through pull request #13 (CI green, 71/71).
+
+## bend-lint on every change since its last pass (2026-10-17)
+
+Mathews Fernando's bend-lint is now a dev dependency (`package.json`, `bend-lint.json` with its 12 performance rules,
+`make lint`), run before each release; a finding is measured before it is taken (Renan, 2026-10-17). Its last pass
+here was on `a3063bd` (2026-10-11). On the 19 Bend files changed since: 16 findings, none taken:
+
+- tensor-array: `missed_fork` on `Bands.zeros`, `bfill`, `blist` (built once at load; he measured forking them as no
+  change), `repeated_call` on `pow2` (only in proofs' types, never run).
+- bpe: `eager_branch` on `has`, `knl`, `wf.go`, `below` and `missed_fork` on `exp.go` (training-time checks and proofs,
+  run once per call of `train`, or never at run time).
+- GPT-2 demo: `list_index_loop` on `slice64(q, off)` in `attn` (12 slices of a 768-list per layer, against 124 M
+  multiply-adds per token: below the noise), `eager_branch` on `ids_ok` and `repeated_call` on `lcl` in the tokenizer
+  (he measured `lcl` in llama.bend's copy as no change).
+
+Found next to it, not by a rule: a profile of GPT-2 generation (one thread, 40 tokens) spends 18.6% in `span_fade` and
+12.8% in `term_drop`, the runtime taking apart list nodes that are shared (the attention reads the key/value cache, lists
+passed with `+`, for every head). llama.bend keeps its cache in arrays; the GPT-2 demo is the list baseline, so this
+stays as it is.
+
+## The CLI's table check without `BPE.wf` (2026-10-17)
+
+From bend-lint's `eager_branch` on `has`/`wf.go`, measured at GPT-2's 50,000 merges (bend2-lab
+`experiments/2026-10-17-lint-scale`): `bpe/cli.bend` checked every merges table it read with `ids_ok` and `BPE.wf`,
+and `wf` walks the rules before each rule, O(n²): 4,395 ms per `encode` of one line, against 55 ms without it (10,000
+merges: 212 → 14 ms), the same output. `wf` holds by construction there, since `rules.go` numbers the rules 0, 1,
+2... (the demos' tokenizers already skip it for that reason), so `table_ok` is `ids_ok` alone. The lint's own fix
+(`has`/`wf` with a `match` instead of `Bool.or`/`Bool.and`) gained 18% and is not taken: `has` and `wf` are the
+predicates of the package's laws, and the package does not change. `reference/test_bpe.py` 0 failures, the six
+malformed-merges cases still refused; fuzz 30/30; `make check` 62/62.
+
+## bend-ml-tensor-fork 0.1.1.0: blocks of any kernel, packing in blocks (2026-10-17)
+
+From BendTorch's phase 3 (parallelism where it pays), measured on one decoder block at SmolLM2's sizes (BendTorch's
+`demo/smol_block.bend`: 512 rows, AdamW under MSE; 16 threads, 3 steps a run, 3 runs). A `perf` profile on 16 threads,
+cut into 1 ms slices and counting the threads at work in each, showed 43% of the step's wall time with three threads or
+fewer at work; the largest share inside this package was packing A and B (sequential) and `TA.cap_depth` sizing the
+output arrays.
+
+- `par1`..`par4`: any kernel `f(e, i0, cnt, arrays)` over 2^d blocks of a range, on up to four arrays shared through
+  `Array.fork` (`@unsafe`), `e` a reusable record (`Data`) with what else `f` needs. The kernel writes only its block's
+  range; then the bits are those of one loop over the whole range, at every depth and thread count. BendTorch runs its
+  optimizer step and its element-wise layers on them.
+- Packing in blocks of lines (`par2` over tensor-array's `pk_lines`) when a product splits and an operand holds 16384
+  cells or more. Below that MNIST's 100 x 784 and 128 x 784 packed faster in one piece (an epoch on 16 threads was 0.1-0.2
+  s slower with every operand in blocks; the 16-thread epoch varies by that much between runs, so I gated it by size).
+- The output arrays sized by doubling a `U32` (`depth`) instead of `TA.cap_depth`; the same capacities.
+- Block step at 135M's sizes 562 → 527 ms per 3 steps, at 360M's 1303 → 1238 ms (both 6%); one thread unchanged.
+- `tests/bits.bend`, third line: three products at par 6 on 512 x 576 x 1536 (their packing runs in blocks; the old
+  grid's operands are all below 16384 cells) and `par1`..`par4` at depths 0-6, cnt = 0, 1, 7, 100, 1000, against one
+  loop: 0 differing words. Three planted faults caught (765,956, 766,974 and 141 words). `make check` 62/62; bend-lint
+  has no finding in the package.
+
+Tried and not adopted: leaves computing 2 x 2 tiles of C (two lines of A against two lines of B per pass over k, packed
+two lines to a cell; each dot keeps its order, 0 differing words). On one P-core 11% slower than one dot at a time;
+alone on an E-core 13% faster; 14 copies of the program at once, one per core, 2x faster on the E-cores; but inside one
+16-thread product 4-25% slower at every split depth, and the block step 20% slower. The emitted C of the dot is 8 loads
+and 16 scalar F32 operations per cell with no spills that matter: the cells are bound by the chain of additions in a
+fixed order, not by reads. Raising the split depth (BendTorch's `par` 4 → 8, 16 → 256 blocks) paid instead: the block
+step 763 → 577 ms per 3 steps at 135M, 1840 → 1313 ms at 360M, by balancing the P- and E-cores.
+- Published: `bend-ml-tensor-fork@0.1.1.0`, hash `0x7426570b56a9f08f09fe41b970d661b9`; `reference/test_published.py` now
+  imports it from BendHub and checks a split product and `par1` against one block.
