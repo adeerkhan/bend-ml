@@ -1260,7 +1260,7 @@ through pull request #14 (CI green).
   benchmarks point at it; tensor-fork 0.1.1.0 and tensor-gpu 0.1.0.0 keep 0.1.12.0 (their `Mat` is that version's), so
   `reference/test_published.py` now reads the version each one imports. `make check` 69/69.
 
-## bend-ml-tensor-gpu 0.1.1.0: bangs over any leaf code (2026-10-18; not published yet)
+## bend-ml-tensor-gpu 0.1.1.0: bangs over any leaf code (2026-10-18)
 
 - Why: putting a whole training step on the GPU (BendTorch) needed bangs for the element-wise layers, RMSNorm, RoPE,
   attention and the optimizer, and those bangs wrote `@unsafe` in BendTorch's own files. Renan's decision (2026-10-18):
@@ -1275,3 +1275,6 @@ through pull request #14 (CI green).
 - Kept on tensor-array 0.1.12.0, like tensor-fork: BendTorch takes both, and its `Mat` must be one version. The
   products call `cap_depth` only on the host, where 0.1.12.0's was cheap.
 - `make check` 74/74.
+- Published (Renan's decision, 2026-10-18): `bend-ml-tensor-gpu@0.1.1.0`, hash `0x92c8fe8f8abfa0e0018d7f1c3ddd061c`;
+  `tests/kernels.bend` against the published package in a clean folder: "0 0" five times on the GPU and with `--gpu
+  off`. BendTorch's `torch/gpu.bend` imports it.
