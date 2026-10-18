@@ -1,7 +1,8 @@
 # Draft comment for bendlang/bend #1393 (and PR #1439): the same lane-stack limit on CUDA
 
 Status: draft (2026-10-18), not posted; Renan posts it, on #1393 (the issue) or #1439 (the PR that fixes it on Metal).
-#1393 and #1439 show Metal only. I have not built #1439 to test it on CUDA.
+#1393 and #1439 show Metal only; I built #1439 (6764c339) and its base (3f9c40e8) from source and ran them on CUDA
+(below).
 
 ---
 
@@ -36,3 +37,8 @@ Every run was deterministic, and `--gpu 4GB` does not change it (the stack is a 
 with a matrix product that appended row lists at each join of its fork tree (fine on the CPU, a fault on CUDA); replacing
 `List.append` with two tail loops fixed it. Two small things that would have saved me time: the message says "machine
 stack", but it is the device lane's stack, and neither `bend guide` nor `SHADERS.md` gives the 2,048-word figure.
+
+I built this PR (6764c339) and its base (3f9c40e8) from source and ran the programs above on CUDA. The base faults at
+every depth past the limit; the PR runs all of them with the CPU's results, my matrix product included (9031405), and a
+depth of 100,000 (`deep!(100000n)`). It did not change the speed of two loop kernels I time (a flat loop over 16,384
+leaves: 213-219 ms against 213-259; a tiled matmul: 172-175 ms both), measured with the CPU busy.
