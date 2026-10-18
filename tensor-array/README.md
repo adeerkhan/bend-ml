@@ -8,7 +8,7 @@ Tensors in Bend 2 over a flat `Array<F32>`, **with the shape in the type**: the 
 
 ```python
 import Base
-import bend-ml-tensor-array@0.1.12.0/main.bend as TA
+import bend-ml-tensor-array@0.1.13.0/main.bend as TA
 
 def prod(a: TA.Mat<100n, 784n>, w: TA.Mat<784n, 128n>) -> TA.MMul<100n, 784n, 128n>:
   TA.Mat.matmul(100n, 784n, 128n, 3n, a, w)   # 3n = 2^3 = 8 parallel blocks
@@ -118,7 +118,7 @@ With parallel blocks, the large MNIST product (100×784·784×128) gains ~2x on 
 
 ## Versions
 
-- `0.1.13.0` (not published yet): `cap_depth` compares with Base's `Nat.is_le`, one native comparison in the compiled
+- `0.1.13.0`: `cap_depth` compares with Base's `Nat.is_le`, one native comparison in the compiled
   program, instead of `leb`, which walked its arguments one step at a time: n steps in all for a capacity of n cells.
   On the host that was little (under 0.4 ms a call); inside a bang it runs on one GPU lane, where `cap_depth(786432)`
   took ~128 ms against ~4.5 ms now (a bang that only computes it, 20 calls, RTX 4050 Laptop). A lemma proves
