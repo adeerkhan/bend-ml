@@ -87,7 +87,9 @@ def main():
     # pattern; Renan's decision, 2026-10-18); its unsafe defs are the tree, its leaves and what reaches them, no package
     # with laws imports it, and it gives tensor-array's bits on the CPU threads and, when CUDA is there, on the GPU
     gpu_defs = ["mm", "put", "tile", "leaf_if", "leaf", "tree", "tree_new", "bang_new", "bang", "run_e", "gemm_new", "gemm",
-                "matmul", "matmul_acc", "matmul_nt", "matmul_nt_acc", "matmul_tn", "matmul_tn_acc"]
+                "matmul", "matmul_acc", "matmul_nt", "matmul_nt_acc", "matmul_tn", "matmul_tn_acc", "join2", "join3", "join4"]
+    gpu_defs += [f"{d}{k}{s}" for k in range(1, 5) for d, s in [("tree", ""), ("root", ""), ("root", "_new"), ("go", ""),
+                 ("go", "_new"), ("run", ""), ("run", "_new")]]
     run("tensor-gpu/main.bend: its @unsafe defs are the bang's tree and what reaches it", [BEND, "tensor-gpu/main.bend"],
         lambda o, c: f"{len(gpu_defs)} defs rely on unsafe or foreign code" in o and re.findall(r"^- (\S+)$", o, re.M) == gpu_defs)
     clean = not any("tensor-gpu" in open(os.path.join(ROOT, f)).read() for f in laws)
@@ -100,12 +102,21 @@ def main():
         for t in ["1", "16"]:
             run(f"tensor-gpu gives tensor-array's bits, A and B intact: 2,958 products, the six public ones, three big ones ({t} CPU threads)",
                 [tg, "--threads", t], lambda o, c: o.split() == gpu_want)
+        tk = os.path.join(d, "tk")
+        run("compile tensor-gpu/tests/kernels.bend", [BEND, "tensor-gpu/tests/kernels.bend", "-o", tk])
+        for t in ["1", "16"]:
+            run(f"tensor-gpu's run1..run4 and run1_new..run4_new give their leaf's bits, inputs intact: 5 sizes ({t} CPU threads)",
+                [tk, "--threads", t], lambda o, c: o.split() == ["0"] * 10)
         cuda = os.environ.get("CUDA_HOME") or os.path.expanduser("~/.local/cuda12")
         if os.path.isdir(cuda):
             tgg = os.path.join(d, "tgg")
             env = {"CUDA_HOME": cuda, "LD_LIBRARY_PATH": os.path.join(cuda, "lib")}
             run("compile tensor-gpu/tests/bits.bend for CUDA", [BEND, "tensor-gpu/tests/bits.bend", "-o", tgg], extra_env=env)
             run("tensor-gpu gives tensor-array's bits on the GPU", [tgg], lambda o, c: o.split() == gpu_want, extra_env=env)
+            tkg = os.path.join(d, "tkg")
+            run("compile tensor-gpu/tests/kernels.bend for CUDA", [BEND, "tensor-gpu/tests/kernels.bend", "-o", tkg], extra_env=env)
+            run("tensor-gpu's run1..run4 and run1_new..run4_new give their leaf's bits on the GPU, inputs intact", [tkg],
+                lambda o, c: o.split() == ["0"] * 10, extra_env=env)
         else:
             print("skip  tensor-gpu on the GPU: no CUDA toolkit (CUDA_HOME)")
     if FULL:
