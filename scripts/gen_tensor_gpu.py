@@ -34,7 +34,7 @@ p = o.append
 p(f"""# bend-ml-tensor-gpu: tensor-array's products on the GPU, with tensor-array's bits.
 #
 #   import ../tensor-array/main.bend as TA
-#   import bend-ml-tensor-gpu@0.1.2.0/main.bend as TG
+#   import bend-ml-tensor-gpu@0.1.2.1/main.bend as TG
 #   TG.matmul(n, k, m, par, a, b)      # the same arguments, result type and bits as TA.Mat.matmul
 #
 # The six products (matmul, matmul_nt, matmul_tn and their accumulating forms) take tensor-array's Mat values and return
@@ -57,9 +57,10 @@ p(f"""# bend-ml-tensor-gpu: tensor-array's products on the GPU, with tensor-arra
 import Base
 import bend-ml-tensor-array@0.1.14.0/main.bend as TA
 
-# the sizes and strides of one product: C[i][j] = sum_p A[i*arow + p*sa] * B[p*sb + j*bcol], n x m, k steps
+# the sizes and strides of one product: C[i][j] = sum_p A[oa + i*arow + p*sa] * B[ob + p*sb + j*bcol], n x m, k steps
+# (oa, ob: 0 except for matmul_precise's blocks)
 type E is Data:
-  E{{n: U32, m: U32, k: U32, tcols: U32, tiles: U32, arow: U32, sa: U32, sb: U32, bcol: U32, kg: Nat, rot: Nat, rem: U32, ac: Bool}}
+  E{{n: U32, m: U32, k: U32, tcols: U32, tiles: U32, arow: U32, sa: U32, sb: U32, bcol: U32, kg: Nat, rot: Nat, rem: U32, ac: Bool, oa: U32, ob: U32}}
 
 # a product that counts only when its step is inside k (the last turn's steps past k add +0.0)
 def pk(ok: Bool, +x: F32) -> F32:
@@ -162,8 +163,8 @@ def put(+ac: Bool, +n: U32, +m: U32, +i0: U32, +j0: U32, c: Array<F32>, t: T) ->
 @unsafe
 def tile(+e: E, +i0: U32, +j0: U32, +a: Array<F32>, +b: Array<F32>, c: Array<F32>) -> Array<F32>:
   match e:
-    case E{{+n, +m, +k, +tcols, +tiles, +arow, +sa, +sb, +bcol, +kg, +rot, +rem, +ac}}:
-      put(ac, n, m, i0, j0, c, mm(kg, (i0 * arow : U32), (j0 * bcol : U32), arow, sa, sb, bcol, rem, rot, {j('0.0' for _ in S)}, turn((i0 * arow : U32), (j0 * bcol : U32), arow, sa, sb, bcol, a, b)))
+    case E{{+n, +m, +k, +tcols, +tiles, +arow, +sa, +sb, +bcol, +kg, +rot, +rem, +ac, +oa, +ob}}:
+      put(ac, n, m, i0, j0, c, mm(kg, (oa + (i0 * arow : U32) : U32), (ob + (j0 * bcol : U32) : U32), arow, sa, sb, bcol, rem, rot, {j('0.0' for _ in S)}, turn((oa + (i0 * arow : U32) : U32), (ob + (j0 * bcol : U32) : U32), arow, sa, sb, bcol, a, b)))
 
 # leaf t computes tile t (row-major over the tiles); leaves past the last tile write nothing
 @unsafe
@@ -175,7 +176,7 @@ def leaf_if(ok: Bool, +e: E, +t: U32, +tcols: U32, +a: Array<F32>, +b: Array<F32
 @unsafe
 def leaf(+e: E, +t: U32, +a: Array<F32>, +b: Array<F32>, c: Array<F32>) -> Array<F32>:
   match e:
-    case E{{+n, +m, +k, +tcols, +tiles, +arow, +sa, +sb, +bcol, +kg, +rot, +rem, +ac}}:
+    case E{{+n, +m, +k, +tcols, +tiles, +arow, +sa, +sb, +bcol, +kg, +rot, +rem, +ac, +oa, +ob}}:
       leaf_if(U32.is_lt(t, tiles), e, t, tcols, a, b, c)
 
 @unsafe
@@ -210,8 +211,11 @@ def run_e(+e: E, +tiles: U32, +a: Array<F32>, +b: Array<F32>, c: Array<F32>) -> 
   ABC{{a, b, bang(e, TA.cap_depth(U32.to_nat(tiles)), a, b, c)}}
 
 # the product's sizes and strides
+def e_ofo(+ac: Bool, +n: Nat, +m: Nat, +k: Nat, +arow: U32, +sa: U32, +sb: U32, +bcol: U32, +oa: U32, +ob: U32) -> E:
+  E{{U32.from_nat(n), U32.from_nat(m), U32.from_nat(k), U32.from_nat(Nat.div(Nat.add(m, {TN - 1}n), {TN}n)), U32.from_nat(Nat.mul(Nat.div(Nat.add(n, {TM - 1}n), {TM}n), Nat.div(Nat.add(m, {TN - 1}n), {TN}n))), arow, sa, sb, bcol, Nat.div(k, 4n), Nat.mod(k, 4n), U32.from_nat(Nat.mod(k, 4n)), ac, oa, ob}}
+
 def e_of(+ac: Bool, +n: Nat, +m: Nat, +k: Nat, +arow: U32, +sa: U32, +sb: U32, +bcol: U32) -> E:
-  E{{U32.from_nat(n), U32.from_nat(m), U32.from_nat(k), U32.from_nat(Nat.div(Nat.add(m, {TN - 1}n), {TN}n)), U32.from_nat(Nat.mul(Nat.div(Nat.add(n, {TM - 1}n), {TM}n), Nat.div(Nat.add(m, {TN - 1}n), {TN}n))), arow, sa, sb, bcol, Nat.div(k, 4n), Nat.mod(k, 4n), U32.from_nat(Nat.mod(k, 4n)), ac}}
+  e_ofo(ac, n, m, k, arow, sa, sb, bcol, 0, 0)
 
 def tiles(+n: Nat, +m: Nat) -> Nat:
   Nat.mul(Nat.div(Nat.add(n, {TM - 1}n), {TM}n), Nat.div(Nat.add(m, {TN - 1}n), {TN}n))
@@ -414,40 +418,33 @@ def run{k}_new({tpl}, +d: Nat, +e: E, {XL}, {caps}) -> {rk}:
 """)
 p("""
 # ---- tensor-array 0.1.14.0's precise product on the GPU (opt-in) ----
-# TA.Mat.matmul_precise's composition, each block one bang: the first block's product made on the device, each next
-# one added into C (the accumulating kernel adds a cell once, as tensor-array's cwr), so the same bits as tensor-array's
-# (tests/bits.bend). The slices of A and B are copied on the host, which pulls their pages back from the device: this
-# is for accuracy, not speed.
+# TA.Mat.matmul_precise's sums, a bang a block of 1024 steps that starts at the block's place in A and B (oa, ob; no
+# copy): the first block's bang makes C on the device, each next one adds its cells into C as the accumulating kernel
+# does (once, as tensor-array's cwr), so every cell is ((x0 + x1) + x2) .., the same bits as tensor-array's
+# (tests/precise.bend). Only plain (not accumulating) products, as tensor-array's matmul_precise.
 
-def abc_g(a: Array<F32>, b: Array<F32>, r: ABC) -> TA.G:
-  match r:
-    case ABC{x, y, c}: TA.G{a, b, c}
+def blk_len(+bi: U32, +k: U32) -> Nat:
+  U32.to_nat(Bool.pick(U32, U32.is_lt((k - (bi * 1024 : U32) : U32), 1024), (k - (bi * 1024 : U32) : U32), 1024))
+
+# the blocks after the first: nb more, from block bi, each added into C
+@unsafe
+def blocks_acc(nb: Nat, +bi: U32, +n: Nat, +m: Nat, +k: U32, +arow: U32, +sa: U32, +sb: U32, +bcol: U32, +a: Array<F32>, +b: Array<F32>, c: Array<F32>) -> Array<F32>:
+  match nb:
+    case 0n: c
+    case 1n++q: blocks_acc(q, (bi + 1 : U32), n, m, k, arow, sa, sb, bcol, a, b, bang(e_ofo(True{}, n, m, blk_len(bi, k), arow, sa, sb, bcol, ((bi * 1024 : U32) * sa : U32), ((bi * 1024 : U32) * sb : U32)), TA.cap_depth(tiles(n, m)), a, b, c))
 
 @unsafe
-def mp_s3(+ac: Bool, +n: Nat, +m: Nat, +w: Nat, +w32: U32, +m32: U32, a: Array<F32>, as: Array<F32>, c: Array<F32>, sb: TA.SL) -> TA.G:
-  match ac sb:
-    case True{} TA.SL{b, bs}: abc_g(a, b, gemm(True{}, n, m, w, w32, 1, m32, 1, as, bs, c))
-    case False{} TA.SL{b, bs}: abc_g(a, b, gemm_new(n, m, w, w32, 1, m32, 1, as, bs))
+def precise_c(+n: Nat, +m: Nat, +k: Nat, +arow: U32, +sa: U32, +sb: U32, +bcol: U32, +a: Array<F32>, +b: Array<F32>) -> Array<F32>:
+  blocks_acc(Nat.sub(U32.to_nat(U32.div((U32.from_nat(k) + 1023 : U32), 1024)), 1n), 1, n, m, U32.from_nat(k), arow, sa, sb, bcol, a, b, bang_new(e_ofo(False{}, n, m, 1024n, arow, sa, sb, bcol, 0, 0), TA.cap_depth(tiles(n, m)), a, b, TA.cap_depth(Nat.mul(n, m))))
 
 @unsafe
-def mp_s2(+ac: Bool, +n: Nat, +m: Nat, +w: Nat, +w32: U32, +m32: U32, +o: U32, c: Array<F32>, b: Array<F32>, sa: TA.SL) -> TA.G:
-  match sa:
-    case TA.SL{a, as}: mp_s3(ac, n, m, w, w32, m32, a, as, c, TA.sl_row(Nat.mul(w, m), (o * m32 : U32), 0, Array.new(F32, TA.cap_depth(Nat.mul(w, m)), 0.0), Array.get(F32, b, (o * m32 : U32))))
-
-@unsafe
-def mp_step(+ac: Bool, +n: Nat, +m: Nat, +k32: U32, +bi: U32, a: Array<F32>, b: Array<F32>, c: Array<F32>) -> TA.G:
-  mp_s2(ac, n, m, TA.blk_len(bi, k32), U32.from_nat(TA.blk_len(bi, k32)), U32.from_nat(m), (bi * 1024 : U32), c, b, TA.sl_rows(n, 0, TA.blk_len(bi, k32), U32.from_nat(TA.blk_len(bi, k32)), k32, (bi * 1024 : U32), TA.SL{a, Array.new(F32, TA.cap_depth(Nat.mul(n, TA.blk_len(bi, k32))), 0.0)}))
-
-@unsafe
-def mp_go(nb: Nat, +bi: U32, +n: Nat, +m: Nat, +k32: U32, g: TA.G) -> TA.G:
-  match nb g:
-    case 0n g: g
-    case 1n++q TA.G{a, b, c}: mp_go(q, (bi + 1 : U32), n, m, k32, mp_step(U32.is_lt(0, bi), n, m, k32, bi, a, b, c))
+def mm_precise3(+n: Nat, +k: Nat, +m: Nat, +a: Array<F32>, +b: Array<F32>) -> TA.MMul<n, k, m>:
+  mm_fin(n, k, m, ABC{a, b, precise_c(n, m, k, U32.from_nat(k), 1, U32.from_nat(m), 1, a, b)})
 
 @unsafe
 def mm_precise2(long: Bool, +n: Nat, +k: Nat, +m: Nat, +par: Nat, a: TA.Mat<n, k>, b: TA.Mat<k, m>) -> TA.MMul<n, k, m>:
   match long a b:
-    case True{} TA.Mat{x} TA.Mat{y}: TA.mmul_fin(n, k, m, mp_go(U32.to_nat(U32.div((U32.from_nat(k) + 1023 : U32), 1024)), 0, n, m, U32.from_nat(k), TA.G{x, y, none(Unit{})}))
+    case True{} TA.Mat{x} TA.Mat{y}: mm_precise3(n, k, m, x, y)
     case False{} a b: matmul(n, k, m, par, a, b)
 
 # C = A · B with k summed in blocks of 1024: TA.Mat.matmul_precise's bits (opt-in)
