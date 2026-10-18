@@ -1,6 +1,6 @@
 # bend-ml-tensor-array: tensors over a flat Array<F32>, with the shape in the type.
 #
-#   import bend-ml-tensor-array@0.1.13.0/main.bend as TA
+#   import bend-ml-tensor-array@0.1.14.0/main.bend as TA
 #
 # Mat<r, c> stores r*c numbers in an Array<F32>, row by row (index i*c + j). The
 # dimensions are erased type parameters: the same guarantee as bend-ml-tensor
@@ -1129,6 +1129,63 @@ def Mat.matmul_tn_acc(+n: Nat, +k: Nat, +m: Nat, par: Nat, a: Mat<k, n>, b: Mat<
   match a b c:
     case Mat{x} Mat{y} Mat{z}:
       mmul_tn_fin(n, k, m, gemm_any(True{}, split_depth(par, n, m, k), n, m, k, 1, U32.from_nat(n), U32.from_nat(m), 1, x, y, z))
+
+# ---- a precise product for long dots (0.1.14.0) ----
+#
+# Mat.matmul_precise is Mat.matmul with k summed in blocks of 1024 (the last one 1..1024): block b's columns of A and
+# rows of B are copied out, the first block's product written into C, each next one's added to it as matmul_acc adds,
+# so every cell is ((x0 + x1) + x2) .., x_b the block's dot with the usual four partial sums. A dot of 49,152 products
+# as four running sums of 12,288 lost the small terms (SmolLM2's head: its gradient 1.8x further from float64 than
+# PyTorch's float32, 0.03x in blocks; BendTorch NOTES, 2026-10-18). Opt-in: it copies the slices and runs one product
+# a block, and the default products keep their speed and bits. Up to 1024 steps it is Mat.matmul itself.
+
+type SL is Type:
+  SL{a: Array<F32>, s: Array<F32>}
+
+# d[di..] = src[si..], k numbers; r holds src[si], already read
+def sl_row(k: Nat, +si: U32, +di: U32, d: Array<F32>, r: Array<F32> & F32) -> SL:
+  match k r:
+    case 0n Tuple{a, x}: SL{a, d}
+    case 1n+p Tuple{a, +x}: sl_row(p, (si + 1 : U32), (di + 1 : U32), Array.set(F32, d, di, x), Array.get(F32, a, (si + 1 : U32)))
+
+# rows i.. of a slice: w numbers a row from src[i*st + o], into d[i*w]
+def sl_rows(r: Nat, +i: U32, +w: Nat, +w32: U32, +st: U32, +o: U32, sl: SL) -> SL:
+  match r sl:
+    case 0n sl: sl
+    case 1n+p SL{a, d}: sl_rows(p, (i + 1 : U32), w, w32, st, o, sl_row(w, ((i * st : U32) + o : U32), (i * w32 : U32), d, Array.get(F32, a, ((i * st : U32) + o : U32))))
+
+def blk_len(+bi: U32, +k: U32) -> Nat:
+  U32.to_nat(Bool.pick(U32, U32.is_lt((k - (bi * 1024 : U32) : U32), 1024), (k - (bi * 1024 : U32) : U32), 1024))
+
+def mp_s4(a: Array<F32>, b: Array<F32>, g: G) -> G:
+  match g:
+    case G{x, y, c}: G{a, b, c}
+
+def mp_s3(+ac: Bool, +par: Nat, +n: Nat, +m: Nat, +w: Nat, +w32: U32, +m32: U32, a: Array<F32>, as: Array<F32>, c: Array<F32>, sb: SL) -> G:
+  match sb:
+    case SL{b, bs}: mp_s4(a, b, gemm_any(ac, split_depth(par, n, m, w), n, m, w, w32, 1, m32, 1, as, bs, c))
+
+def mp_s2(+ac: Bool, +par: Nat, +n: Nat, +m: Nat, +w: Nat, +w32: U32, +m32: U32, +o: U32, c: Array<F32>, b: Array<F32>, sa: SL) -> G:
+  match sa:
+    case SL{a, as}: mp_s3(ac, par, n, m, w, w32, m32, a, as, c, sl_row(Nat.mul(w, m), (o * m32 : U32), 0, Array.new(F32, cap_depth(Nat.mul(w, m)), 0.0), Array.get(F32, b, (o * m32 : U32))))
+
+# block bi: A's columns o..o+w (A is n x k) and B's rows o..o+w (B is k x m), multiplied into C (added when ac)
+def mp_step(+ac: Bool, +par: Nat, +n: Nat, +m: Nat, +k32: U32, +bi: U32, a: Array<F32>, b: Array<F32>, c: Array<F32>) -> G:
+  mp_s2(ac, par, n, m, blk_len(bi, k32), U32.from_nat(blk_len(bi, k32)), U32.from_nat(m), (bi * 1024 : U32), c, b, sl_rows(n, 0, blk_len(bi, k32), U32.from_nat(blk_len(bi, k32)), k32, (bi * 1024 : U32), SL{a, Array.new(F32, cap_depth(Nat.mul(n, blk_len(bi, k32))), 0.0)}))
+
+def mp_go(nb: Nat, +bi: U32, +par: Nat, +n: Nat, +m: Nat, +k32: U32, g: G) -> G:
+  match nb g:
+    case 0n g: g
+    case 1n++q G{a, b, c}: mp_go(q, (bi + 1 : U32), par, n, m, k32, mp_step(U32.is_lt(0, bi), par, n, m, k32, bi, a, b, c))
+
+def mm_precise2(long: Bool, +n: Nat, +k: Nat, +m: Nat, par: Nat, a: Mat<n, k>, b: Mat<k, m>) -> MMul<n, k, m>:
+  match long a b:
+    case True{} Mat{x} Mat{y}: mmul_fin(n, k, m, mp_go(U32.to_nat(U32.div((U32.from_nat(k) + 1023 : U32), 1024)), 0, par, n, m, U32.from_nat(k), G{x, y, Array.new(F32, cap_depth(Nat.mul(n, m)), 0.0)}))
+    case False{} a b: Mat.matmul(n, k, m, par, a, b)
+
+# C = A · B (n x k) · (k x m), k summed in blocks of 1024 (above); opt-in
+def Mat.matmul_precise(+n: Nat, +k: Nat, +m: Nat, +par: Nat, a: Mat<n, k>, b: Mat<k, m>) -> MMul<n, k, m>:
+  mm_precise2(Nat.is_lt(1024n, k), n, k, m, par, a, b)
 
 # ---- element-wise and training operations ----
 
