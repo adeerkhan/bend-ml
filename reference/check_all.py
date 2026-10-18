@@ -83,6 +83,35 @@ def main():
         run("tensor-fork/tests/bits.bend on the JS lane", [BEND, "tensor-fork/tests/bits.bend"],
             lambda o, c: re.findall(r"^[0-9 ]+$", o, re.M) == ["0 0 14832", "0 0 0 0 0 0", "0 0 0 0 0 0 0"])
 
+    # 1d. tensor-gpu: tensor-array's products as one bang each (Base's @unsafe Array.fork/join, upstream's one-block
+    # pattern; Renan's decision, 2026-10-18); its unsafe defs are the tree, its leaves and what reaches them, no package
+    # with laws imports it, and it gives tensor-array's bits on the CPU threads and, when CUDA is there, on the GPU
+    gpu_defs = ["mm", "put", "tile", "leaf_if", "leaf", "tree", "tree_new", "bang_new", "bang", "run_e", "gemm_new", "gemm",
+                "matmul", "matmul_acc", "matmul_nt", "matmul_nt_acc", "matmul_tn", "matmul_tn_acc"]
+    run("tensor-gpu/main.bend: its @unsafe defs are the bang's tree and what reaches it", [BEND, "tensor-gpu/main.bend"],
+        lambda o, c: f"{len(gpu_defs)} defs rely on unsafe or foreign code" in o and re.findall(r"^- (\S+)$", o, re.M) == gpu_defs)
+    clean = not any("tensor-gpu" in open(os.path.join(ROOT, f)).read() for f in laws)
+    results.append(clean)
+    print(f"{'ok  ' if clean else 'ERROR'} no package with laws imports tensor-gpu")
+    gpu_want = ["0", "0", "2958"] + ["0"] * 9
+    with tempfile.TemporaryDirectory() as d:
+        tg = os.path.join(d, "tg")
+        run("compile tensor-gpu/tests/bits.bend", [BEND, "tensor-gpu/tests/bits.bend", "-o", tg])
+        for t in ["1", "16"]:
+            run(f"tensor-gpu gives tensor-array's bits, A and B intact: 2,958 products, the six public ones, three big ones ({t} CPU threads)",
+                [tg, "--threads", t], lambda o, c: o.split() == gpu_want)
+        cuda = os.environ.get("CUDA_HOME") or os.path.expanduser("~/.local/cuda12")
+        if os.path.isdir(cuda):
+            tgg = os.path.join(d, "tgg")
+            env = {"CUDA_HOME": cuda, "LD_LIBRARY_PATH": os.path.join(cuda, "lib")}
+            run("compile tensor-gpu/tests/bits.bend for CUDA", [BEND, "tensor-gpu/tests/bits.bend", "-o", tgg], extra_env=env)
+            run("tensor-gpu gives tensor-array's bits on the GPU", [tgg], lambda o, c: o.split() == gpu_want, extra_env=env)
+        else:
+            print("skip  tensor-gpu on the GPU: no CUDA toolkit (CUDA_HOME)")
+    if FULL:
+        run("tensor-gpu/tests/bits.bend on the JS lane", [BEND, "tensor-gpu/tests/bits.bend"],
+            lambda o, c: re.findall(r"^[0-9 ]+$", o, re.M) == ["0 0 2958", "0 0 0 0 0 0", "0 0 0"])
+
     # 2. shape errors that MUST fail to check
     for f, msg in [("tensor/tests/bad_matmul.bend", "expected"), ("tensor/tests/bad_reshape.bend", "expected"), ("tensor-array/tests/bad_matmul.bend", "expected"), ("tensor-array/tests/bad_grad.bend", "expected"), ("examples/runtime_batch_bad.bend", "expected"), ("examples/symbolic_reshape_bad.bend", "expected"), ("examples/square_transpose_bad.bend", "expected"), ("tensor-array/tests/bad_bands.bend", "expected")]:
         run(f"{f} must be a type error", [BEND, f], lambda o, c, m=msg: "SOME PROOFS FAIL" in o and m in o)
