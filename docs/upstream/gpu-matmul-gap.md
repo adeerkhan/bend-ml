@@ -62,7 +62,19 @@ slower (1.45-1.7 ms). The rest is coalescing. Bend's loads cost 16.45 sectors a 
 threads runs one aligned range of 128 leaves, but inside the block the leaves are dealt to threads in an order that
 changes from run to run (`gpu-leaf-order.md`, a separate issue). Renumbering the leaves to fit the order I observed most
 often (a permutation of the low 7 bits) brings the matmul to 9.39 sectors a request, 12.7 M from L2, and 3.16 ms a
-product (from 4.3, the same results). Ruled out: the leaf count (4,096 to 16,384 leaves give the same ratio), unrolling
+product (from 4.3, the same results). Adding the poll's removal on top gives the account (Nsight Systems, the main pass):
+
+| main pass, 512² 4x4n | ms |
+|---|---:|
+| as built | 4.50 |
+| leaves renumbered | 3.23 |
+| renumbered, poll split (the other issue's patch) | 2.63 |
+| renumbered, no poll | 1.81 |
+| handwritten with Bend's index mask, poll and occupancy | 1.45-1.7 |
+| handwritten | 1.04 |
+
+The last 10-20% is the rest of Bend's extra instructions a step (the masks rebuilt from the class bits, the 64-bit
+counter), which my handwritten copy does not reproduce. Ruled out: the leaf count (4,096 to 16,384 leaves give the same ratio), unrolling
 (the handwritten kernel without unrolling is not slower), managed memory (the handwritten kernel in one managed heap
 runs as fast) and the data layout (the same in both).
 
