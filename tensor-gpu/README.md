@@ -2,14 +2,17 @@
 
 The six products of [`bend-ml-tensor-array`](../tensor-array) (`matmul`, `matmul_nt`, `matmul_tn` and their accumulating
 forms), with the same arguments, result types and **bits**, each run as one `!` call (a bang) so that it runs on the GPU
-when there is one. It is **not proved**, and says so: like [`bend-ml-tensor-fork`](../tensor-fork), it shares arrays
+when there is one; and, since 0.1.1.0, bangs over any leaf code written in plain Bend (`run1`..`run4`), for the rest of
+a training step (element-wise layers, norms, attention, the optimizer). It is **not proved**, and says so: like [`bend-ml-tensor-fork`](../tensor-fork), it shares arrays
 between the leaves of a fork tree through Base's `@unsafe` `Array.fork`.
 
 - Bend: **2.0.37** · License: MIT · Depends on `bend-ml-tensor-array@0.1.12.0`. Published on BendHub as
-  `bend-ml-tensor-gpu@0.1.0.0` (hash `0xb00297062e21c56b88008f0c5387c0a0`, 2026-10-18).
-- `bend tensor-gpu/main.bend` → `SOME PROOFS FAIL`, naming the 18 defs that rely on `@unsafe` code. All of it is Bend:
+  `bend-ml-tensor-gpu@0.1.0.0` (hash `0xb00297062e21c56b88008f0c5387c0a0`, 2026-10-18); 0.1.1.0 not published yet.
+- `bend tensor-gpu/main.bend` → `SOME PROOFS FAIL`, naming the 49 defs that rely on `@unsafe` code. All of it is Bend:
   no foreign code, no CUDA written by hand.
-- Tests: `tests/bits.bend`, against tensor-array, bit for bit, on the GPU, on 1 and 16 CPU threads and on the JS lane.
+- Tests: `tests/bits.bend`, against tensor-array, bit for bit, on the GPU, on 1 and 16 CPU threads and on the JS lane;
+  `tests/kernels.bend`, `run1`..`run4` and `run1_new`..`run4_new` against their leaf run once over every cell, on the
+  GPU and on 1 and 16 CPU threads.
 - Written by [`scripts/gen_tensor_gpu.py`](../scripts/gen_tensor_gpu.py) (4 x 4 tiles): a tile carries 64 sums through
   its loop, which is tedious to write by hand.
 
@@ -41,6 +44,46 @@ tensor-array's own `cwr`. Bend builds the device code without fused multiply-add
 on any tile size and any number of leaves; `tests/bits.bend` checks 2,958 products (n, m = 1..9 with k = 0, 1, 3, 8, 9,
 17, and bigger shapes, in the three layouts and both modes), the six public products and three big ones, with -0, ±inf,
 NaN and a subnormal mixed into the inputs.
+
+## Bangs over any leaf code (0.1.1.0)
+
+`runK` and `runK_new` (K = 1..4 outputs) run one bang over 2^d leaves. Leaf t of l = 2^d gets t, l, a record `e` of
+scalars (any `Data` type, the same for every leaf), four input arrays and its K outputs, and returns the outputs. The
+leaf is a template (`~f`) written in plain Bend: it takes every array as an ordinary argument, reads it with `Array.get`
+and may write the outputs, so the code that uses it needs no `@unsafe`; the sharing is inside the package, where every
+node of the tree holds a handle to each array and joins the outputs.
+
+```python
+type EN is Data:
+  EN{n: U32}
+
+# out[i] = 2 * x[i] for the cells t, t + l, .. below n
+def dbl(k: Nat, +i: U32, +l: U32, o: Array<F32>, r: Array<F32> & F32) -> Array<F32>:
+  match k r:
+    case 0n Tuple{a, +x}: o
+    case 1n+q Tuple{a, +x}: dbl(q, (i + l : U32), l, Array.set(F32, o, i, (2.0 * x : F32)), Array.get(F32, a, (i + l : U32)))
+
+def leaf(+t: U32, +l: U32, +e: EN, x1: Array<F32>, x2: Array<F32>, x3: Array<F32>, x4: Array<F32>, o: Array<F32>) -> Array<F32>:
+  match e:
+    case EN{+n}: dbl(TG.share(t, n, l), t, l, o, Array.get(F32, x1, t))
+
+# x of n cells into a new array of 2^c cells; returns R1{x, the three unused inputs, the output}
+def twice(+n: Nat, +c: Nat, x: Array<F32>) -> TG.R1:
+  TG.run1_new(~EN, ~leaf, TG.depth(n), EN{U32.from_nat(n)}, x, TG.none(Unit{}), TG.none(Unit{}), TG.none(Unit{}), c)
+```
+
+- `runK(~E, ~f, d, e, x1, x2, x3, x4, o1, .., oK)` writes the outputs it is given, in place (an optimizer's weights and
+  moments); `runK_new(~E, ~f, d, e, x1, x2, x3, x4, c1, .., cK)` makes them inside the bang with 2^c cells, since an
+  array made on the host pulls device pages back. Both return `RK{x1, x2, x3, x4, outputs}` (`O2`..`O4` for several).
+- `depth(n)`: a tree for n cells (2^14 leaves once there are that many). `share(t, n, l)`: how many of the cells t, t +
+  l, .. lie below n, so a leaf takes its cells round-robin and neighbouring lanes read neighbouring cells. `none(Unit{})`:
+  an array of one cell for an unused input. Compute sizes, depths and capacities on the host and pass them in.
+- What is not checked, as for the products: that a leaf writes only its own cells (two leaves writing one cell race)
+  and never an input, and that leaves past the work return their outputs unchanged. The leaves run in a run-time order
+  inside each group of 128, so a leaf's result must not depend on another's.
+- The bits are the leaf's own code, the same on the GPU as on the CPU threads, except where CUDA's math functions
+  differ from the host's (an `exp` on the device takes the float overload; `docs/upstream/gpu-math-overloads.md`).
+- BendTorch's GPU layers are written over these.
 
 ## Speed (first measurement)
 
