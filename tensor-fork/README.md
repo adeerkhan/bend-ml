@@ -5,15 +5,15 @@ forms), with the same arguments, result types and bits, but with the parallel bl
 of copying them, and `par1`..`par4`, which run any kernel of yours over blocks of a range on up to four shared arrays.
 It is faster wherever the work splits into blocks; it is **not proved**, and says so.
 
-- Bend: **2.0.37** · License: MIT · Depends on `bend-ml-tensor-array@0.1.13.0`.
+- Bend: **2.0.37** · License: MIT · Depends on `bend-ml-tensor-array@0.1.14.0`.
 - `bend tensor-fork/main.bend` → `SOME PROOFS FAIL`, naming the 26 defs that rely on `@unsafe` code (below). All of it is
   Bend: no foreign code.
 - Tests: `tests/bits.bend`, against tensor-array, bit for bit (below).
 
 ```python
 import Base
-import bend-ml-tensor-array@0.1.13.0/main.bend as TA
-import bend-ml-tensor-fork@0.1.1.1/main.bend as TF
+import bend-ml-tensor-array@0.1.14.0/main.bend as TA
+import bend-ml-tensor-fork@0.1.2.0/main.bend as TF
 
 def prod(a: TA.Mat<100n, 784n>, w: TA.Mat<784n, 128n>) -> TA.MMul<100n, 784n, 128n>:
   TF.matmul(100n, 784n, 128n, 3n, a, w)   # instead of TA.Mat.matmul(100n, 784n, 128n, 3n, a, w)
@@ -113,3 +113,6 @@ defs, so a new one cannot slip in unnoticed:
   `TA.cap_depth`. The products' bits are unchanged.
 - `0.1.1.1` (2026-10-18): on tensor-array 0.1.13.0 (its `cap_depth` compares natively), so that a program can take
   tensor-fork, tensor-gpu and tensor-array 0.1.13.0 together. The same code and bits.
+- `0.1.2.0` (2026-10-18): `matmul_precise`, tensor-array 0.1.14.0's opt-in precise product (k in blocks of 1024)
+  with this package's products a block: the same bits as tensor-array's (`tests/precise.bend`). On tensor-array 0.1.14.0;
+  the other products unchanged.

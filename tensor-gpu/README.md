@@ -6,10 +6,11 @@ when there is one; and, since 0.1.1.0, bangs over any leaf code written in plain
 a training step (element-wise layers, norms, attention, the optimizer). It is **not proved**, and says so: like [`bend-ml-tensor-fork`](../tensor-fork), it shares arrays
 between the leaves of a fork tree through Base's `@unsafe` `Array.fork`.
 
-- Bend: **2.0.37** · License: MIT · Depends on `bend-ml-tensor-array@0.1.13.0`. Versions on BendHub: 0.1.0.0, the
+- Bend: **2.0.37** · License: MIT · Depends on `bend-ml-tensor-array@0.1.14.0`. Versions on BendHub: 0.1.0.0, the
   products alone (hash `0xb00297062e21c56b88008f0c5387c0a0`); 0.1.1.0, with `run1`..`run4`
   (`0x92c8fe8f8abfa0e0018d7f1c3ddd061c`), both on tensor-array 0.1.12.0; 0.1.1.1, the same code on tensor-array
-  0.1.13.0 (2026-10-18).
+  0.1.13.0; 0.1.2.0, `matmul_precise` (tensor-array 0.1.14.0's opt-in precise product, a bang a block; its slices are
+  copied on the host, for accuracy, not speed) on tensor-array 0.1.14.0 (2026-10-18).
 - `bend tensor-gpu/main.bend` → `SOME PROOFS FAIL`, naming the 49 defs that rely on `@unsafe` code. All of it is Bend:
   no foreign code, no CUDA written by hand.
 - Tests: `tests/bits.bend`, against tensor-array, bit for bit, on the GPU, on 1 and 16 CPU threads and on the JS lane;
@@ -20,7 +21,7 @@ between the leaves of a fork tree through Base's `@unsafe` `Array.fork`.
 
 ```python
 import Base
-import bend-ml-tensor-array@0.1.13.0/main.bend as TA
+import bend-ml-tensor-array@0.1.14.0/main.bend as TA
 import bend-ml-tensor-gpu@0.1.1.0/main.bend as TG
 
 def prod(x: TA.Mat<256n, 576n>, w: TA.Mat<1536n, 576n>) -> TA.MMulNT<256n, 576n, 1536n>:
