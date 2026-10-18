@@ -131,9 +131,14 @@ with `--gpu off`, and a lane-stack overflow inside a bang is still reported. Thr
 | tiled matmul 512², 4x4 a leaf, 50 products | 217-221 ms | 216-219 ms | 242 ms |
 | 2M reads a leaf of a 32-number Array | 2.0 s | 2.0 s | 1.07 s |
 
-It keeps most of the gain and loses nowhere. The last row does not move: with the split that loop is unrolled and has no
-`YIELD` (Nsight Compute's SASS view), and it waits on each load because each step adds the value the previous one read; I
-have not found why removing the poll altogether made it faster. Nsight Compute on main's matmul shows the poll in the
+It keeps most of the gain and loses nowhere. The last row does not move, and Nsight Compute shows why: the three builds
+make the same 102.5 M load requests, but without the poll that loop's only exit is its `Nat` fuel, so nvcc knows the
+trip count and issues 16 loads back to back (546 M warp instructions, 93 ms); with the split the inner loop has two exits
+(the budget and the fuel), a test sits between consecutive loads and one load is in flight at a time (1,000 M, 190 ms;
+main: 1,845 M, 184 ms). For a spin counted by a `Nat`, the inner budget could be the smaller of 4,096 and the steps
+left, which would give the compiler one exit again; I have not tried it.
+
+Nsight Compute on main's matmul shows the poll in the
 hot loop's SASS (`YIELD`, `BSSY`/`BSYNC` every K step) among 83 instructions a step, against ~45 in the same loop
 handwritten in CUDA.
 
