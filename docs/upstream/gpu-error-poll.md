@@ -3,8 +3,9 @@
 Status: draft (2026-10-18), not posted; Renan posts it. Checked for duplicates on 2026-10-18 (searched "err_spun",
 "WL_SPIN", "YIELD", "error poll", "GPU slow loop"): none; the closest is #1143 (Metal, heap_free's error check, closed).
 Still in upstream main at e5527d5b (`err_spun` and `WL_SPIN` unchanged). Metal uses the same poll on the device; I have
-no Metal machine to measure it. The times were taken with the CPU in use and the GPU idle; the ratios are large and stable across runs, but they are
-rerun on an idle machine before posting (BendTorch launch plan, idle round 2).
+no Metal machine to measure it. The times were taken with the CPU in use and the GPU idle, on driver 610.57.04 (first
+tables) and 615.78.08 (the patch); Renan posts it after every table here is rerun on an idle machine. The tested
+patch is below in full.
 
 ---
 
@@ -78,7 +79,63 @@ In a handwritten CUDA kernel with the same loop (one thread / 16,384 threads, ns
 So the check can stay: emitting a spin as an inner loop of up to 4,096 steps with no poll, inside an outer loop that
 polls once, costs nothing measurable here. On the host `err_seen` is `DEVICE && ...`, so CPU builds do not pay.
 
-## Possible directions
+## A fix that keeps the poll
 
-- Split each device spin into an inner loop with no poll and an outer loop that polls (above).
-- Or poll only at task boundaries on the device, if a lane stuck in one long loop after an error is acceptable.
+I tried the split shape in `bend2/comp.ts` (against main e5527d5b): on the device, each `spin_N`, each spin segment and the
+work loop run their body in an inner loop of up to 4,096 steps with no poll, inside an outer loop that polls once. A
+`break` leaves the inner loop with steps left, which also ends the outer one; `continue` stays in the inner loop. The
+host keeps its macros, so CPU builds do not change.
+
+```diff
+@@ emit_native (spin_N)
+-    ...seg_take(seg), "WL_SPIN"], 1),
+-    ...seg_text(seg.lines, 2), "  break;", "  }",
++    ...seg_take(seg), "WL_SPIN2"], 1),
++    ...seg_text(seg.lines, 2), "  break;", "  }", "  WL_SPIN2_END",
+@@ compile_book (spin segments)
+-      "WL_OPEN", ...seg.spin ? ["WL_SPIN", ...seg.lines, "WL_SPUN"]
++      "WL_OPEN", ...seg.spin ? ["WL_SPIN2", ...seg.lines, "WL_SPUN2"]
+@@ after WL_AGAIN
++#if DEVICE
++#define WL_SPIN2     for (u32 wfirst = 1;; wfirst = 0) { \
++  if (!wfirst && err_seen(e.mem)) { return 0; } \
++  u32 wleft = 4096; for (; wleft != 0; wleft -= 1) {
++#define WL_SPIN2_END if (wleft != 0) { break; } }
++#define WL_SPUN2     } if (wleft != 0) { break; } } break;
++#else
++#define WL_SPIN2     WL_SPIN
++#define WL_SPIN2_END
++#define WL_SPUN2     WL_SPUN
++#endif
+@@ work_loop (device)
+-  WL_SPIN
++  WL_SPIN2
+   switch (fid) {
+@@ end of work_loop
+   }
++  WL_SPIN2_END
++  return 0;
+ }
+```
+
+Built from main with `bun bend2/main.ts`, every program below prints the same results as main's build, on the GPU and
+with `--gpu off`, and a lane-stack overflow inside a bang is still reported. Three alternated rounds (driver 615.78.08):
+
+| program | main | with the split | poll removed (2.0.37) |
+|---|---:|---:|---:|
+| flat loop, 1 leaf, 2M steps | 140-172 ms | 19 ms | 7 ms |
+| flat loop, 16,384 leaves, 2M steps | 219-223 ms | 42-43 ms | 15 ms |
+| interleaved reads of one shared Array | 169-171 ms | 131-133 ms | 114 ms |
+| matrix-vector 16,384 x 4,096, steady state | 3.1-3.3 ms | 2.67-2.72 ms | ~2.5 ms |
+| tiled matmul 512², 8x4 a leaf, 50 products | 173-175 ms | 157-160 ms | 150 ms |
+| tiled matmul 512², 4x4 a leaf, 50 products | 217-221 ms | 216-219 ms | 242 ms |
+| 2M reads a leaf of a 32-number Array | 2.0 s | 2.0 s | 1.07 s |
+
+It keeps most of the gain and loses nowhere. The last row does not move: with the split that loop is unrolled and has no
+`YIELD` (Nsight Compute's SASS view), and it waits on each load because each step adds the value the previous one read; I
+have not found why removing the poll altogether made it faster. Nsight Compute on main's matmul shows the poll in the
+hot loop's SASS (`YIELD`, `BSSY`/`BSYNC` every K step) among 83 instructions a step, against ~45 in the same loop
+handwritten in CUDA.
+
+The change adds 17 lines to `comp.ts`, which is at its token cap; a shorter form is surely possible. I have not opened a
+pull request; this is to show the shape works.
