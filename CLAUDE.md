@@ -83,6 +83,10 @@ NOTES exp. 10).
   Indexes wrap around, so never write past a capacity. Corrected 2026-10-13 (NOTES).
 - An `import ... as M` does not re-export. A BendHub package can hold several files (users import each one as
   `pkg@ver/file.bend`; NOTES 2026-10-10, lead 5), but then every caller must import every file it uses.
+- A template (`~l`) is substituted at each use, so a record of functions passed as one is built again wherever it is
+  used, and its plain-value fields are computed then. A composite whose value field reads its children
+  (`count: count(a) + count(b)`) builds their whole records at every use and drops them: +5% instructions in a
+  two-layer model (2026-10-17). Make such fields closures (`count: Unit -> U32`).
 
 ## Agent skills
 
