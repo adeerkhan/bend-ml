@@ -1278,3 +1278,10 @@ through pull request #14 (CI green).
 - Published (Renan's decision, 2026-10-18): `bend-ml-tensor-gpu@0.1.1.0`, hash `0x92c8fe8f8abfa0e0018d7f1c3ddd061c`;
   `tests/kernels.bend` against the published package in a clean folder: "0 0" five times on the GPU and with `--gpu
   off`. BendTorch's `torch/gpu.bend` imports it.
+
+## tensor-fork 0.1.1.1 and tensor-gpu 0.1.1.1: on tensor-array 0.1.13.0 (2026-10-18)
+
+- The same code and bits on tensor-array 0.1.13.0, so that BendTorch takes the three packages at one version (a `Mat`
+  of 0.1.12.0 is not one of 0.1.13.0). Published (Renan's go-ahead, 2026-10-18): `bend-ml-tensor-fork@0.1.1.1`, hash
+  `0x2a674c049e9c1285b25b99116b738ac5`; `bend-ml-tensor-gpu@0.1.1.1`, hash `0xfd9365cb299b6e0c5ac82f822afabaee`.
+  `reference/test_published.py` passes for both; `make check` 74/74.
