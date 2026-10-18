@@ -42,6 +42,6 @@ means the GPU and the CPU drift apart from the first step.
 ## Possible directions
 
 - Emit the double call on the device too (as the host does), so every lane gives the same bits.
-- Or emit the float call on the host too (`expf`), if speed on the GPU matters more than the host's accuracy; then the
-  host and the GPU agree with each other (JS would still use doubles).
+- A float call on the host too (`expf`) would not be enough: glibc's `expf` and CUDA's are different implementations
+  and would still disagree.
 - Either way, document what each lane computes.
