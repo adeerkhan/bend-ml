@@ -1,8 +1,8 @@
 # bend-ml-tensor-fork: bend-ml-tensor-array's products, with the parallel blocks sharing their operands; and par1..par4,
 # any kernel over blocks of a range sharing up to four arrays.
 #
-#   import bend-ml-tensor-array@0.1.13.0/main.bend as TA
-#   import bend-ml-tensor-fork@0.1.1.1/main.bend as TF
+#   import bend-ml-tensor-array@0.1.14.0/main.bend as TA
+#   import bend-ml-tensor-fork@0.1.2.0/main.bend as TF
 #   TF.matmul(n, k, m, par, a, b)      # the same arguments, result type and bits as TA.Mat.matmul
 #
 # The six products (matmul, matmul_nt, matmul_tn and their accumulating forms) take tensor-array's Mat values and
@@ -21,7 +21,7 @@
 # the blocks are the halves of the fork tree, as in tensor-array's own split. tests/bits.bend checks both by sampling.
 # All of it is Bend: no foreign code.
 import Base
-import bend-ml-tensor-array@0.1.13.0/main.bend as TA
+import bend-ml-tensor-array@0.1.14.0/main.bend as TA
 
 # ---- blocks: any kernel over ranges of shared arrays ----
 # parN runs a kernel f over 2^d blocks of the range 0 .. cnt-1 in a tree of parallel lets; every block gets a handle to
@@ -272,3 +272,38 @@ def matmul_tn_acc(+n: Nat, +k: Nat, +m: Nat, par: Nat, a: TA.Mat<k, n>, b: TA.Ma
   match a b c:
     case TA.Mat{x} TA.Mat{y} TA.Mat{z}:
       TA.mmul_tn_fin(n, k, m, gemm_any(True{}, TA.split_depth(par, n, m, k), n, m, k, 1, U32.from_nat(n), U32.from_nat(m), 1, x, y, z))
+
+# ---- tensor-array 0.1.14.0's precise product with these blocks (opt-in) ----
+# TA.Mat.matmul_precise's composition, each block's product computed by gemm_any above: k in blocks of 1024, the first
+# block's product written into C, each next one's added to it, so the same bits as tensor-array's (tests/bits.bend).
+
+@unsafe
+def mp_s3(+ac: Bool, +par: Nat, +n: Nat, +m: Nat, +w: Nat, +w32: U32, +m32: U32, a: Array<F32>, as: Array<F32>, c: Array<F32>, sb: TA.SL) -> TA.G:
+  match sb:
+    case TA.SL{b, bs}: TA.mp_s4(a, b, gemm_any(ac, TA.split_depth(par, n, m, w), n, m, w, w32, 1, m32, 1, as, bs, c))
+
+@unsafe
+def mp_s2(+ac: Bool, +par: Nat, +n: Nat, +m: Nat, +w: Nat, +w32: U32, +m32: U32, +o: U32, c: Array<F32>, b: Array<F32>, sa: TA.SL) -> TA.G:
+  match sa:
+    case TA.SL{a, as}: mp_s3(ac, par, n, m, w, w32, m32, a, as, c, TA.sl_row(Nat.mul(w, m), (o * m32 : U32), 0, Array.new(F32, depth(Nat.mul(w, m)), 0.0), Array.get(F32, b, (o * m32 : U32))))
+
+@unsafe
+def mp_step(+ac: Bool, +par: Nat, +n: Nat, +m: Nat, +k32: U32, +bi: U32, a: Array<F32>, b: Array<F32>, c: Array<F32>) -> TA.G:
+  mp_s2(ac, par, n, m, TA.blk_len(bi, k32), U32.from_nat(TA.blk_len(bi, k32)), U32.from_nat(m), (bi * 1024 : U32), c, b, TA.sl_rows(n, 0, TA.blk_len(bi, k32), U32.from_nat(TA.blk_len(bi, k32)), k32, (bi * 1024 : U32), TA.SL{a, Array.new(F32, depth(Nat.mul(n, TA.blk_len(bi, k32))), 0.0)}))
+
+@unsafe
+def mp_go(nb: Nat, +bi: U32, +par: Nat, +n: Nat, +m: Nat, +k32: U32, g: TA.G) -> TA.G:
+  match nb g:
+    case 0n g: g
+    case 1n++q TA.G{a, b, c}: mp_go(q, (bi + 1 : U32), par, n, m, k32, mp_step(U32.is_lt(0, bi), par, n, m, k32, bi, a, b, c))
+
+@unsafe
+def mm_precise2(long: Bool, +n: Nat, +k: Nat, +m: Nat, +par: Nat, a: TA.Mat<n, k>, b: TA.Mat<k, m>) -> TA.MMul<n, k, m>:
+  match long a b:
+    case True{} TA.Mat{x} TA.Mat{y}: TA.mmul_fin(n, k, m, mp_go(U32.to_nat(U32.div((U32.from_nat(k) + 1023 : U32), 1024)), 0, par, n, m, U32.from_nat(k), TA.G{x, y, Array.new(F32, depth(Nat.mul(n, m)), 0.0)}))
+    case False{} a b: matmul(n, k, m, par, a, b)
+
+# C = A · B with k summed in blocks of 1024: TA.Mat.matmul_precise's bits (opt-in)
+@unsafe
+def matmul_precise(+n: Nat, +k: Nat, +m: Nat, +par: Nat, a: TA.Mat<n, k>, b: TA.Mat<k, m>) -> TA.MMul<n, k, m>:
+  mm_precise2(Nat.is_lt(1024n, k), n, k, m, par, a, b)
