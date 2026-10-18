@@ -1,6 +1,7 @@
 # Draft comment for bendlang/bend PR #1602 (static `vote[3]`, 0 dynamic shared bytes on CUDA)
 
-Status: draft (2026-10-18), not posted; Renan posts it. The timings are from an idle machine (alternated rounds).
+Status: draft (2026-10-18), not posted; Renan posts it. The timings are from an idle machine (alternated rounds, driver
+610.57.04); the Nsight Compute lines from a busy CPU (driver 615.78.08), counts and occupancy only.
 
 ---
 
@@ -23,3 +24,9 @@ One more effect besides L1: occupancy. The device program of the matmul uses 80 
 `cuOccupancyMaxActiveBlocksPerMultiprocessor` gives 6 blocks of 128 lanes per SM with 0 dynamic shared bytes and 5 with
 18,432 (`TG_HOLD * 8`): 12,800 lanes at once instead of 15,360, while the launch asks for 128 groups (16,384 lanes). The
 matmul is the one case that got slower here (6%); I have not found why.
+
+Nsight Compute on that matmul's main pass (application replay, since kernel replay restores device memory and Bend's
+heap is managed memory): with 18,432 dynamic bytes the shared-memory limit is 5 blocks per SM and the launch needs 1.28
+waves, with 16.5 warps active a cycle; with this PR the limit moves to 14 (registers then cap at 6), 1.07 waves, 21.8
+warps active, the same 175.6 M instructions, and the pass was not faster in my runs. So more resident lanes did not help
+this kernel; the memory-bound ones above are where it pays.
