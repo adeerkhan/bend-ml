@@ -110,6 +110,12 @@ def check_read():
     return ok
 
 
+# the tensor-array version a published package imports (its Mat types are that version's), read from its source
+def ta_of(pkg):
+    src = open(os.path.join(ROOT, pkg.replace("bend-ml-", ""), "main.bend"), encoding="utf-8").read()
+    return re.search(r"import (bend-ml-tensor-array@[0-9.]+)/main.bend", src).group(1)
+
+
 # bend-ml-tensor-fork is outside the proofs (no laws): a product at split_depth's threshold split in 4 blocks against tensor-array's in one, and
 # par1 over 4 blocks against one loop, on the C lane at 4 threads
 FORK = """import Base
@@ -152,7 +158,7 @@ def check_fork():
     tf = f"bend-ml-tensor-fork@{VERS['bend-ml-tensor-fork']}"
     with tempfile.TemporaryDirectory() as d:
         f = os.path.join(d, "fork.bend")
-        open(f, "w").write(FORK.format(ta=f"bend-ml-tensor-array@{VERS['bend-ml-tensor-array']}", tf=tf))
+        open(f, "w").write(FORK.format(ta=ta_of("bend-ml-tensor-fork"), tf=tf))
         cc = subprocess.run([BEND, f, "-o", os.path.join(d, "fork")], capture_output=True, text=True, env=ENV, cwd=d)
         c = subprocess.run([os.path.join(d, "fork"), "--threads", "4"], capture_output=True, text=True, cwd=d) if cc.returncode == 0 else cc
     lines = [l.split() for l in c.stdout.strip().splitlines()]
@@ -193,7 +199,7 @@ def check_gpu():
     tg = f"bend-ml-tensor-gpu@{VERS['bend-ml-tensor-gpu']}"
     with tempfile.TemporaryDirectory() as d:
         f = os.path.join(d, "gpu.bend")
-        open(f, "w").write(GPU.format(ta=f"bend-ml-tensor-array@{VERS['bend-ml-tensor-array']}", tg=tg))
+        open(f, "w").write(GPU.format(ta=ta_of("bend-ml-tensor-gpu"), tg=tg))
         cc = subprocess.run([BEND, f, "-o", os.path.join(d, "gpu")], capture_output=True, text=True, env=ENV, cwd=d)
         c = subprocess.run([os.path.join(d, "gpu"), "--threads", "4"], capture_output=True, text=True, cwd=d) if cc.returncode == 0 else cc
     words = c.stdout.split()
