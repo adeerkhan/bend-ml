@@ -163,8 +163,49 @@ def check_fork():
     return ok
 
 
+# bend-ml-tensor-gpu is outside the proofs (no laws): its product (one bang) against tensor-array's, on the C lane's CPU
+# threads (the test builds without CUDA); the GPU's bits are checked by tensor-gpu/tests/bits.bend in make check
+GPU = """import Base
+import {ta}/main.bend as TA
+import {tg}/main.bend as TG
+
+def c_of(r: TA.MMul<128n, 512n, 128n>) -> Array<F32>:
+  match r:
+    case TA.MMul{{a, b, TA.Mat{{c}}}}:
+      c
+
+def sum(k: Nat, +i: U32, acc: F32, r: Array<F32> & F32) -> F32:
+  match k r:
+    case 0n Tuple{{a, x}}:
+      acc
+    case 1n+q Tuple{{a, +x}}:
+      sum(q, (i + 1 : U32), (acc + x : F32), Array.get(F32, a, (i + 1 : U32)))
+
+def tot(+n: Nat, a: Array<F32>) -> F32:
+  sum(n, 0, 0.0, Array.get(F32, a, 0))
+
+def main() -> IO(Unit):
+  IO.print(F32.show(tot(16384n, c_of(TG.matmul(128n, 512n, 128n, 0n, TA.Mat.fill(128n, 512n, 0.5), TA.Mat.fill(512n, 128n, 3.0))))) ++ " " ++ F32.show(tot(16384n, c_of(TA.Mat.matmul(128n, 512n, 128n, 0n, TA.Mat.fill(128n, 512n, 0.5), TA.Mat.fill(512n, 128n, 3.0))))))
+"""
+
+
+def check_gpu():
+    tg = f"bend-ml-tensor-gpu@{VERS['bend-ml-tensor-gpu']}"
+    with tempfile.TemporaryDirectory() as d:
+        f = os.path.join(d, "gpu.bend")
+        open(f, "w").write(GPU.format(ta=f"bend-ml-tensor-array@{VERS['bend-ml-tensor-array']}", tg=tg))
+        cc = subprocess.run([BEND, f, "-o", os.path.join(d, "gpu")], capture_output=True, text=True, env=ENV, cwd=d)
+        c = subprocess.run([os.path.join(d, "gpu"), "--threads", "4"], capture_output=True, text=True, cwd=d) if cc.returncode == 0 else cc
+    words = c.stdout.split()
+    ok = len(words) == 2 and words[0] == words[1]
+    print(("ok   " if ok else "ERROR ") + f"published {tg.replace('bend-ml-', '')}: its product gives tensor-array's bits")
+    if not ok:
+        print(c.stdout[:400], (cc.stderr + c.stderr)[:800])
+    return ok
+
+
 def main():
-    missing = [p for p in NEED + ["bend-ml-binary-read", "bend-ml-tensor-fork"] if p not in VERS]
+    missing = [p for p in NEED + ["bend-ml-binary-read", "bend-ml-tensor-fork", "bend-ml-tensor-gpu"] if p not in VERS]
     if missing:
         sys.exit(f"ERROR: version missing from the README table: {missing}")
     src = PROGRAM.format(nl=f"bend-ml-nat-lemmas@{VERS['bend-ml-nat-lemmas']}",
@@ -183,6 +224,7 @@ def main():
         print(out[:800])
     ok = check_read() and ok
     ok = check_fork() and ok
+    ok = check_gpu() and ok
     sys.exit(0 if ok else 1)
 
 
