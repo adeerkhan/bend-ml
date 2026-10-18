@@ -1306,3 +1306,9 @@ through pull request #14 (CI green).
 - Published (Renan's decision): `bend-ml-tensor-array@0.1.14.0` (`0x0f6479f09ada7ae614e64e31e8f5a730`),
   `bend-ml-tensor-fork@0.1.2.0` (`0x5734508f2a6198d9a87a28d4c58bfbae`), `bend-ml-tensor-gpu@0.1.2.0`
   (`0xb9e60d53a545944cea5862de7643d281`). `make check` 82/82.
+- tensor-gpu 0.1.2.1 (2026-10-18, published, `0x454d8eb5320624d5b121fdc9d78ee0a6`): `matmul_precise`'s blocks run as
+  bangs that start at their place in A and B (`E` gains offsets `oa`, `ob`, 0 for every other product) instead of
+  slices copied on the host, which pulled the device's pages back. BendTorch's SmolLM2-sized block on the GPU, 3 steps,
+  3 alternated runs: 963-979 ms with 0.1.2.0, 690-702 with 0.1.2.1 (679-697 before the precise dX), the same losses.
+  `tests/precise.bend`, `bits.bend` and `kernels.bend` pass on the GPU and the CPU threads; `make check` 82/82 once
+  published.
