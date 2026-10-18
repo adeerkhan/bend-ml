@@ -1285,3 +1285,24 @@ through pull request #14 (CI green).
   of 0.1.12.0 is not one of 0.1.13.0). Published (Renan's go-ahead, 2026-10-18): `bend-ml-tensor-fork@0.1.1.1`, hash
   `0x2a674c049e9c1285b25b99116b738ac5`; `bend-ml-tensor-gpu@0.1.1.1`, hash `0xfd9365cb299b6e0c5ac82f822afabaee`.
   `reference/test_published.py` passes for both; `make check` 74/74.
+
+## A precise product for long dots: tensor-array 0.1.14.0, tensor-fork 0.1.2.0, tensor-gpu 0.1.2.0 (2026-10-18)
+
+- Why: BendTorch's SmolLM2-135M gradients were 1.8x further from float64 than PyTorch float32's, and the cause was one
+  product, the head's dX (k = 49,152 classes as four running sums of 12,288 terms; BendTorch NOTES).
+- First try, in the dot loops themselves (every product with k > 1024 in blocks): right (the same cells as dotr's
+  blocks), but a SmolLM2 step got 15% slower, still 9% with a native test sending short dots to the old path, 23% with
+  the blocks folded into the cells-of-8 loop (more live variables in the hottest loop), 8% with blocks of 2048. Renan's
+  decision: opt-in, the default products unchanged. Reverted.
+- `Mat.matmul_precise` (tensor-array), `TF.matmul_precise`, `TG.matmul_precise`: each block's columns of A and rows of B
+  copied out, the first block's product into C, each next one's added (as matmul_acc), so a cell is ((x0 + x1) + x2) ..
+  with each block's dot as usual. Up to 1024 steps it is the plain product. Tests: `tensor-array/tests/blocks.bend`
+  (every cell against dotr's blocks built independently, and the plain product up to 1024: "0 22"; the plain product
+  in its place gives 196 differing words), tensor-fork's and tensor-gpu's `tests/precise.bend` against tensor-array's
+  (GPU and CPU threads: "0 21").
+- Speed at the head's shape (256 x 49,152 x 576, 16 threads, busy machine, 3 alternated runs): `TF.matmul_precise`
+  0.38 s, `TF.matmul` 0.52 s; the blocks' slices of B (1024 x 576) fit the cache. On the GPU the slices are copied on the
+  host: for accuracy, not speed.
+- Published (Renan's decision): `bend-ml-tensor-array@0.1.14.0` (`0x0f6479f09ada7ae614e64e31e8f5a730`),
+  `bend-ml-tensor-fork@0.1.2.0` (`0x5734508f2a6198d9a87a28d4c58bfbae`), `bend-ml-tensor-gpu@0.1.2.0`
+  (`0xb9e60d53a545944cea5862de7643d281`). `make check` 82/82.
