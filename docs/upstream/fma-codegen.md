@@ -2,7 +2,9 @@
 
 Status: draft (2026-10-17), not posted; Renan posts it. Checked for duplicates on 2026-10-18 (searched "FMA",
 "fused multiply", "fp-contract", "march", "f32_rewrap"): none. Reproduced on Bend 2.0.37, clang 22.1.8, Core Ultra 7
-155H. Speed not measured: the issue says so.
+155H. Not to be posted before the speed is measured (2026-10-18, Renan): the timing of `-O3`, `-O3 -march=native` and
+`+ -ffp-contract=fast` is in BendTorch's `docs/plan.md` ("For the next idle-machine run"). If the native target gains
+little, this stays a draft; if it gains clearly, the issue becomes one about an opt-in target flag, FMA a detail.
 
 ---
 
