@@ -135,8 +135,17 @@ It keeps most of the gain and loses nowhere. The last row does not move, and Nsi
 make the same 102.5 M load requests, but without the poll that loop's only exit is its `Nat` fuel, so nvcc knows the
 trip count and issues 16 loads back to back (546 M warp instructions, 93 ms); with the split the inner loop has two exits
 (the budget and the fuel), a test sits between consecutive loads and one load is in flight at a time (1,000 M, 190 ms;
-main: 1,845 M, 184 ms). For a spin counted by a `Nat`, the inner budget could be the smaller of 4,096 and the steps
-left, which would give the compiler one exit again; I have not tried it.
+main: 1,845 M, 184 ms). For a spin counted by a `Nat`, the shape that works is the
+fuel's exit tested in the outer loop and an inner loop of exactly min(4,096, k) steps. I checked it twice:
+
+- in Bend: that loop's spin rewritten by hand in the emitted C (the `k == 0` case moved to the outer loop, `u32 wn = k <
+  4096 ? k : 4096; for (j < wn) { step }; k -= wn;`) runs it in 1.12-1.15 s with the poll kept, against 1.94-2.04 s with
+  the split above and 1.09-1.11 s with no poll, the same results;
+- in a handwritten kernel of the same loop capped at Bend's occupancy (5 blocks per SM): one exit 749 ms, the two-exit
+  split 1,604 ms, the counted budget 806 ms (at full occupancy all three run alike, 707-715 ms: there are enough warps to
+  hide the wait).
+
+So a `Nat`-fuelled spin would want the counted form, and the others the split form above.
 
 Nsight Compute on main's matmul shows the poll in the
 hot loop's SASS (`YIELD`, `BSSY`/`BSYNC` every K step) among 83 instructions a step, against ~45 in the same loop
