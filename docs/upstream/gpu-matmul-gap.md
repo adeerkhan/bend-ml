@@ -73,8 +73,10 @@ product (from 4.3, the same results). Adding the poll's removal on top gives the
 | handwritten with Bend's index mask, poll and occupancy | 1.45-1.7 |
 | handwritten | 1.04 |
 
-The last 10-20% is the rest of Bend's extra instructions a step (the masks rebuilt from the class bits, the 64-bit
-counter), which my handwritten copy does not reproduce. Ruled out: the leaf count (4,096 to 16,384 leaves give the same ratio), unrolling
+Copying the rest into the handwritten kernel closes it: Bend's addressing (both masks rebuilt every step from the
+array term's class bits, a 64-bit counter) costs nothing measurable there, and running on each thread the leaf Bend ran
+there in a measured run (renumbered the same way) gives 1.56-1.65 ms, against Bend's 1.69-1.84 ms, within the run-to-run
+spread (busy CPU). Ruled out: the leaf count (4,096 to 16,384 leaves give the same ratio), unrolling
 (the handwritten kernel without unrolling is not slower), managed memory (the handwritten kernel in one managed heap
 runs as fast) and the data layout (the same in both).
 
