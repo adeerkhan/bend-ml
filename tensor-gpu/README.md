@@ -7,7 +7,8 @@ a training step (element-wise layers, norms, attention, the optimizer). It is **
 between the leaves of a fork tree through Base's `@unsafe` `Array.fork`.
 
 - Bend: **2.0.37** · License: MIT · Depends on `bend-ml-tensor-array@0.1.12.0`. Published on BendHub as
-  `bend-ml-tensor-gpu@0.1.0.0` (hash `0xb00297062e21c56b88008f0c5387c0a0`, 2026-10-18); 0.1.1.0 not published yet.
+  `bend-ml-tensor-gpu@0.1.1.0` (hash `0x92c8fe8f8abfa0e0018d7f1c3ddd061c`, 2026-10-18; 0.1.0.0, the products alone,
+  `0xb00297062e21c56b88008f0c5387c0a0`).
 - `bend tensor-gpu/main.bend` → `SOME PROOFS FAIL`, naming the 49 defs that rely on `@unsafe` code. All of it is Bend:
   no foreign code, no CUDA written by hand.
 - Tests: `tests/bits.bend`, against tensor-array, bit for bit, on the GPU, on 1 and 16 CPU threads and on the JS lane;
@@ -19,7 +20,7 @@ between the leaves of a fork tree through Base's `@unsafe` `Array.fork`.
 ```python
 import Base
 import bend-ml-tensor-array@0.1.12.0/main.bend as TA
-import bend-ml-tensor-gpu@0.1.0.0/main.bend as TG
+import bend-ml-tensor-gpu@0.1.1.0/main.bend as TG
 
 def prod(x: TA.Mat<256n, 576n>, w: TA.Mat<1536n, 576n>) -> TA.MMulNT<256n, 576n, 1536n>:
   TG.matmul_nt(256n, 576n, 1536n, 0n, x, w)   # instead of TA.Mat.matmul_nt(...); par is ignored
