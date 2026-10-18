@@ -1,8 +1,8 @@
 # Draft issue for bendlang/bend: the C backend never emits fused multiply-add
 
-Status: draft (2026-10-17), not posted; Renan posts it. Not checked for duplicates yet (search "FMA", "fp-contract",
-"fused multiply" before posting). Reproduced on Bend 2.0.37, clang 22.1.8, Core Ultra 7 155H. Speed not measured yet:
-measure the products with and without fusion on an idle machine before posting, or post it as a question.
+Status: draft (2026-10-17), not posted; Renan posts it. Checked for duplicates on 2026-10-18 (searched "FMA",
+"fused multiply", "fp-contract", "march", "f32_rewrap"): none. Reproduced on Bend 2.0.37, clang 22.1.8, Core Ultra 7
+155H. Speed not measured: the issue says so.
 
 ---
 
@@ -31,7 +31,7 @@ them:
 | `-std=c11 -O3 -march=native` | 0 |
 | `-std=c11 -O3 -march=native -ffp-contract=fast` | 6 |
 
-In a larger program (a 30-layer transformer's training step built with BendHub packages), the last line fuses 218 sites,
+In a larger program (a 30-layer transformer's training step, built on bend-ml's BendHub packages), the last line fuses 218 sites,
 the hot product loop among them (`vfmadd213ps`).
 
 ## Why it may matter
@@ -50,4 +50,22 @@ the hot product loop among them (`vfmadd213ps`).
   fuse where the target allows it.
 - A Base `F32.fma(a, b, c)` primitive for code that wants it explicitly.
 
-Files: `fma_dot.bend` (here).
+Repro (`fma_dot.bend`, also at https://github.com/nuxyel/bend-ml/blob/3d13885/docs/upstream/fma_dot.bend):
+
+```python
+import Base
+
+def dot(k: Nat, +i: U32, acc: F32, ra: Array<F32> & F32, rb: Array<F32> & F32) -> F32:
+  match k ra rb:
+    case 0n Tuple{a, +x} Tuple{b, +y}: (acc + (x * y : F32) : F32)
+    case 1n+q Tuple{a, +x} Tuple{b, +y}:
+      dot(q, (i + 1 : U32), (acc + (x * y : F32) : F32), Array.get(F32, a, (i + 1 : U32)), Array.get(F32, b, (i + 1 : U32)))
+
+def main() -> IO(Unit):
+  IO.print(F32.show(dot(1048575n, 0, 0.0, Array.get(F32, Array.new(F32, 20n, 0.5), 0), Array.get(F32, Array.new(F32, 20n, 0.25), 0))))
+```
+
+```sh
+bend fma_dot.bend -o fma_dot.c
+clang -std=c11 -O3 -march=native -ffp-contract=fast fma_dot.c -lpthread -lm -o fma_dot && objdump -d fma_dot | grep -c vfmadd
+```
