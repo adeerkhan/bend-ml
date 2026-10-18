@@ -1,7 +1,7 @@
 # bend-ml-tensor-gpu: tensor-array's products on the GPU, with tensor-array's bits.
 #
 #   import bend-ml-tensor-array@0.1.12.0/main.bend as TA
-#   import bend-ml-tensor-gpu@0.1.0.0/main.bend as TG
+#   import bend-ml-tensor-gpu@0.1.1.0/main.bend as TG
 #   TG.matmul(n, k, m, par, a, b)      # the same arguments, result type and bits as TA.Mat.matmul
 #
 # The six products (matmul, matmul_nt, matmul_tn and their accumulating forms) take tensor-array's Mat values and return
@@ -317,3 +317,213 @@ def matmul_tn_acc(+n: Nat, +k: Nat, +m: Nat, par: Nat, a: TA.Mat<k, n>, b: TA.Ma
   match a b c:
     case TA.Mat{x} TA.Mat{y} TA.Mat{z}:
       mm_tn_fin(n, k, m, gemm(True{}, n, m, k, 1, U32.from_nat(n), U32.from_nat(m), 1, x, y, z))
+
+# =====================================================================================================================
+# Bangs over any leaf code (0.1.1.0). runK and runK_new (K = 1..4 outputs) run one bang over 2^d leaves: leaf t of
+# l = 2^d gets t, l, a record e of scalars (the same for every leaf), four input arrays and the K outputs, and returns
+# the outputs. The leaf code is a template (~f), written by the caller in plain Bend: it takes every array as an ordinary
+# argument (it reads them with Array.get and may write the outputs), so it needs no @unsafe; the sharing is here, where
+# every node of the tree holds a handle to each array (Array.fork in Base, upstream's one-block pattern) and joins the
+# outputs (Array.join). runK takes the outputs from the caller and writes them in place (an optimizer's weights and
+# moments); runK_new makes them inside the bang with 2^c1.. cells, since an array made on the host pulls device pages
+# back (see bang_new above). Both return the inputs unchanged with the outputs (RK). An unused input is any array, such
+# as none(Unit{}).
+#
+# Not checked, as for the products: that a leaf writes only its own cells of the outputs (two leaves writing one cell
+# race) and never an input. Leaves past the work must return their outputs unchanged; share(t, n, l) is how many of the
+# cells t, t + l, t + 2l, .. lie below n (leaf t's cells when n cells are dealt round-robin, so neighbouring lanes read
+# neighbouring cells), and depth(n) is a tree for n cells: 2^14 leaves once there are that many, else the fewest that
+# cover them. The leaves run in a run-time order inside each group of 128 (bendlang/bend's CUDA lowering), so a leaf's
+# result must not depend on another's. Every number a leaf computes is the caller's own code, so the bits are the
+# caller's: the same on the GPU as on the CPU threads, except where CUDA's math functions differ from the host's (an exp
+# on the device takes the float overload; bend-ml's docs/upstream/gpu-math-overloads.md).
+# =====================================================================================================================
+
+def depth2(big: Bool, +n: Nat) -> Nat:
+  match big:
+    case True{}: 14n
+    case False{}: TA.cap_depth(n)
+
+# leaves for n cells: 2^14 when there are that many, else the fewest powers of two that cover them
+def depth(+n: Nat) -> Nat:
+  depth2(Nat.is_le(16384n, n), n)
+
+# how many of the cells t, t + l, t + 2l, .. lie below n
+def share(+t: U32, +n: U32, +l: U32) -> Nat:
+  U32.to_nat(Bool.pick(U32, U32.is_lt(t, n), U32.div(((n - t : U32) + (l - 1 : U32) : U32), l), 0))
+
+# an array of one cell, for an unused input
+def none(u: Unit) -> Array<F32>:
+  Array.new(F32, 0n, 0.0)
+
+type O2 is Type:
+  O2{a: Array<F32>, b: Array<F32>}
+
+type O3 is Type:
+  O3{a: Array<F32>, b: Array<F32>, c: Array<F32>}
+
+type O4 is Type:
+  O4{a: Array<F32>, b: Array<F32>, c: Array<F32>, d: Array<F32>}
+
+type R1 is Type:
+  R1{x1: Array<F32>, x2: Array<F32>, x3: Array<F32>, x4: Array<F32>, a: Array<F32>}
+
+type R2 is Type:
+  R2{x1: Array<F32>, x2: Array<F32>, x3: Array<F32>, x4: Array<F32>, o: O2}
+
+type R3 is Type:
+  R3{x1: Array<F32>, x2: Array<F32>, x3: Array<F32>, x4: Array<F32>, o: O3}
+
+type R4 is Type:
+  R4{x1: Array<F32>, x2: Array<F32>, x3: Array<F32>, x4: Array<F32>, o: O4}
+
+@unsafe
+def join2(x: O2, y: O2) -> O2:
+  match x y:
+    case O2{a, b} O2{a2, b2}: O2{Array.join(F32, a, a2), Array.join(F32, b, b2)}
+
+@unsafe
+def join3(x: O3, y: O3) -> O3:
+  match x y:
+    case O3{a, b, c} O3{a2, b2, c2}: O3{Array.join(F32, a, a2), Array.join(F32, b, b2), Array.join(F32, c, c2)}
+
+@unsafe
+def join4(x: O4, y: O4) -> O4:
+  match x y:
+    case O4{a, b, c, d} O4{a2, b2, c2, d2}: O4{Array.join(F32, a, a2), Array.join(F32, b, b2), Array.join(F32, c, c2), Array.join(F32, d, d2)}
+
+@unsafe
+def tree1(~E: Data, ~f: @+t: U32 -> @+l: U32 -> @+e: E -> Array<F32> -> Array<F32> -> Array<F32> -> Array<F32> -> Array<F32> -> Array<F32>, +d: Nat, +t: U32, +l: U32, +e: E, +x1: Array<F32>, +x2: Array<F32>, +x3: Array<F32>, +x4: Array<F32>, +oa: Array<F32>) -> Array<F32>:
+  match d:
+    case 0n: f(t, l, e, x1, x2, x3, x4, oa)
+    case 1n+q:
+      x y = tree1(~E, ~f, q, (t * 2 : U32), l, e, x1, x2, x3, x4, oa) tree1(~E, ~f, q, ((t * 2 : U32) + 1 : U32), l, e, x1, x2, x3, x4, oa)
+      Array.join(F32, x, y)
+
+@unsafe
+def root1(~E: Data, ~f: @+t: U32 -> @+l: U32 -> @+e: E -> Array<F32> -> Array<F32> -> Array<F32> -> Array<F32> -> Array<F32> -> Array<F32>, +d: Nat, +e: E, +x1: Array<F32>, +x2: Array<F32>, +x3: Array<F32>, +x4: Array<F32>, oa: Array<F32>) -> Array<F32>:
+  tree1(~E, ~f, d, 0, U32.pow(2, d), e, x1, x2, x3, x4, oa)
+
+@unsafe
+def root1_new(~E: Data, ~f: @+t: U32 -> @+l: U32 -> @+e: E -> Array<F32> -> Array<F32> -> Array<F32> -> Array<F32> -> Array<F32> -> Array<F32>, +d: Nat, +e: E, +x1: Array<F32>, +x2: Array<F32>, +x3: Array<F32>, +x4: Array<F32>, +ca: Nat) -> Array<F32>:
+  root1(~E, ~f, d, e, x1, x2, x3, x4, Array.new(F32, ca, 0.0))
+
+@unsafe
+def go1(~E: Data, ~f: @+t: U32 -> @+l: U32 -> @+e: E -> Array<F32> -> Array<F32> -> Array<F32> -> Array<F32> -> Array<F32> -> Array<F32>, +d: Nat, +e: E, +x1: Array<F32>, +x2: Array<F32>, +x3: Array<F32>, +x4: Array<F32>, oa: Array<F32>) -> R1:
+  R1{x1, x2, x3, x4, root1!(~E, ~f, d, e, x1, x2, x3, x4, oa)}
+
+@unsafe
+def go1_new(~E: Data, ~f: @+t: U32 -> @+l: U32 -> @+e: E -> Array<F32> -> Array<F32> -> Array<F32> -> Array<F32> -> Array<F32> -> Array<F32>, +d: Nat, +e: E, +x1: Array<F32>, +x2: Array<F32>, +x3: Array<F32>, +x4: Array<F32>, +ca: Nat) -> R1:
+  R1{x1, x2, x3, x4, root1_new!(~E, ~f, d, e, x1, x2, x3, x4, ca)}
+
+# one bang over 2^d leaves with 1 output written in place
+@unsafe
+def run1(~E: Data, ~f: @+t: U32 -> @+l: U32 -> @+e: E -> Array<F32> -> Array<F32> -> Array<F32> -> Array<F32> -> Array<F32> -> Array<F32>, +d: Nat, +e: E, x1: Array<F32>, x2: Array<F32>, x3: Array<F32>, x4: Array<F32>, oa: Array<F32>) -> R1:
+  go1(~E, ~f, d, e, x1, x2, x3, x4, oa)
+
+# one bang over 2^d leaves with 1 new output of 2^c.. cells, made on the device
+@unsafe
+def run1_new(~E: Data, ~f: @+t: U32 -> @+l: U32 -> @+e: E -> Array<F32> -> Array<F32> -> Array<F32> -> Array<F32> -> Array<F32> -> Array<F32>, +d: Nat, +e: E, x1: Array<F32>, x2: Array<F32>, x3: Array<F32>, x4: Array<F32>, +ca: Nat) -> R1:
+  go1_new(~E, ~f, d, e, x1, x2, x3, x4, ca)
+
+@unsafe
+def tree2(~E: Data, ~f: @+t: U32 -> @+l: U32 -> @+e: E -> Array<F32> -> Array<F32> -> Array<F32> -> Array<F32> -> O2 -> O2, +d: Nat, +t: U32, +l: U32, +e: E, +x1: Array<F32>, +x2: Array<F32>, +x3: Array<F32>, +x4: Array<F32>, +oa: Array<F32>, +ob: Array<F32>) -> O2:
+  match d:
+    case 0n: f(t, l, e, x1, x2, x3, x4, O2{oa, ob})
+    case 1n+q:
+      x y = tree2(~E, ~f, q, (t * 2 : U32), l, e, x1, x2, x3, x4, oa, ob) tree2(~E, ~f, q, ((t * 2 : U32) + 1 : U32), l, e, x1, x2, x3, x4, oa, ob)
+      join2(x, y)
+
+@unsafe
+def root2(~E: Data, ~f: @+t: U32 -> @+l: U32 -> @+e: E -> Array<F32> -> Array<F32> -> Array<F32> -> Array<F32> -> O2 -> O2, +d: Nat, +e: E, +x1: Array<F32>, +x2: Array<F32>, +x3: Array<F32>, +x4: Array<F32>, oa: Array<F32>, ob: Array<F32>) -> O2:
+  tree2(~E, ~f, d, 0, U32.pow(2, d), e, x1, x2, x3, x4, oa, ob)
+
+@unsafe
+def root2_new(~E: Data, ~f: @+t: U32 -> @+l: U32 -> @+e: E -> Array<F32> -> Array<F32> -> Array<F32> -> Array<F32> -> O2 -> O2, +d: Nat, +e: E, +x1: Array<F32>, +x2: Array<F32>, +x3: Array<F32>, +x4: Array<F32>, +ca: Nat, +cb: Nat) -> O2:
+  root2(~E, ~f, d, e, x1, x2, x3, x4, Array.new(F32, ca, 0.0), Array.new(F32, cb, 0.0))
+
+@unsafe
+def go2(~E: Data, ~f: @+t: U32 -> @+l: U32 -> @+e: E -> Array<F32> -> Array<F32> -> Array<F32> -> Array<F32> -> O2 -> O2, +d: Nat, +e: E, +x1: Array<F32>, +x2: Array<F32>, +x3: Array<F32>, +x4: Array<F32>, oa: Array<F32>, ob: Array<F32>) -> R2:
+  R2{x1, x2, x3, x4, root2!(~E, ~f, d, e, x1, x2, x3, x4, oa, ob)}
+
+@unsafe
+def go2_new(~E: Data, ~f: @+t: U32 -> @+l: U32 -> @+e: E -> Array<F32> -> Array<F32> -> Array<F32> -> Array<F32> -> O2 -> O2, +d: Nat, +e: E, +x1: Array<F32>, +x2: Array<F32>, +x3: Array<F32>, +x4: Array<F32>, +ca: Nat, +cb: Nat) -> R2:
+  R2{x1, x2, x3, x4, root2_new!(~E, ~f, d, e, x1, x2, x3, x4, ca, cb)}
+
+# one bang over 2^d leaves with 2 outputs written in place
+@unsafe
+def run2(~E: Data, ~f: @+t: U32 -> @+l: U32 -> @+e: E -> Array<F32> -> Array<F32> -> Array<F32> -> Array<F32> -> O2 -> O2, +d: Nat, +e: E, x1: Array<F32>, x2: Array<F32>, x3: Array<F32>, x4: Array<F32>, oa: Array<F32>, ob: Array<F32>) -> R2:
+  go2(~E, ~f, d, e, x1, x2, x3, x4, oa, ob)
+
+# one bang over 2^d leaves with 2 new outputs of 2^c.. cells, made on the device
+@unsafe
+def run2_new(~E: Data, ~f: @+t: U32 -> @+l: U32 -> @+e: E -> Array<F32> -> Array<F32> -> Array<F32> -> Array<F32> -> O2 -> O2, +d: Nat, +e: E, x1: Array<F32>, x2: Array<F32>, x3: Array<F32>, x4: Array<F32>, +ca: Nat, +cb: Nat) -> R2:
+  go2_new(~E, ~f, d, e, x1, x2, x3, x4, ca, cb)
+
+@unsafe
+def tree3(~E: Data, ~f: @+t: U32 -> @+l: U32 -> @+e: E -> Array<F32> -> Array<F32> -> Array<F32> -> Array<F32> -> O3 -> O3, +d: Nat, +t: U32, +l: U32, +e: E, +x1: Array<F32>, +x2: Array<F32>, +x3: Array<F32>, +x4: Array<F32>, +oa: Array<F32>, +ob: Array<F32>, +oc: Array<F32>) -> O3:
+  match d:
+    case 0n: f(t, l, e, x1, x2, x3, x4, O3{oa, ob, oc})
+    case 1n+q:
+      x y = tree3(~E, ~f, q, (t * 2 : U32), l, e, x1, x2, x3, x4, oa, ob, oc) tree3(~E, ~f, q, ((t * 2 : U32) + 1 : U32), l, e, x1, x2, x3, x4, oa, ob, oc)
+      join3(x, y)
+
+@unsafe
+def root3(~E: Data, ~f: @+t: U32 -> @+l: U32 -> @+e: E -> Array<F32> -> Array<F32> -> Array<F32> -> Array<F32> -> O3 -> O3, +d: Nat, +e: E, +x1: Array<F32>, +x2: Array<F32>, +x3: Array<F32>, +x4: Array<F32>, oa: Array<F32>, ob: Array<F32>, oc: Array<F32>) -> O3:
+  tree3(~E, ~f, d, 0, U32.pow(2, d), e, x1, x2, x3, x4, oa, ob, oc)
+
+@unsafe
+def root3_new(~E: Data, ~f: @+t: U32 -> @+l: U32 -> @+e: E -> Array<F32> -> Array<F32> -> Array<F32> -> Array<F32> -> O3 -> O3, +d: Nat, +e: E, +x1: Array<F32>, +x2: Array<F32>, +x3: Array<F32>, +x4: Array<F32>, +ca: Nat, +cb: Nat, +cc: Nat) -> O3:
+  root3(~E, ~f, d, e, x1, x2, x3, x4, Array.new(F32, ca, 0.0), Array.new(F32, cb, 0.0), Array.new(F32, cc, 0.0))
+
+@unsafe
+def go3(~E: Data, ~f: @+t: U32 -> @+l: U32 -> @+e: E -> Array<F32> -> Array<F32> -> Array<F32> -> Array<F32> -> O3 -> O3, +d: Nat, +e: E, +x1: Array<F32>, +x2: Array<F32>, +x3: Array<F32>, +x4: Array<F32>, oa: Array<F32>, ob: Array<F32>, oc: Array<F32>) -> R3:
+  R3{x1, x2, x3, x4, root3!(~E, ~f, d, e, x1, x2, x3, x4, oa, ob, oc)}
+
+@unsafe
+def go3_new(~E: Data, ~f: @+t: U32 -> @+l: U32 -> @+e: E -> Array<F32> -> Array<F32> -> Array<F32> -> Array<F32> -> O3 -> O3, +d: Nat, +e: E, +x1: Array<F32>, +x2: Array<F32>, +x3: Array<F32>, +x4: Array<F32>, +ca: Nat, +cb: Nat, +cc: Nat) -> R3:
+  R3{x1, x2, x3, x4, root3_new!(~E, ~f, d, e, x1, x2, x3, x4, ca, cb, cc)}
+
+# one bang over 2^d leaves with 3 outputs written in place
+@unsafe
+def run3(~E: Data, ~f: @+t: U32 -> @+l: U32 -> @+e: E -> Array<F32> -> Array<F32> -> Array<F32> -> Array<F32> -> O3 -> O3, +d: Nat, +e: E, x1: Array<F32>, x2: Array<F32>, x3: Array<F32>, x4: Array<F32>, oa: Array<F32>, ob: Array<F32>, oc: Array<F32>) -> R3:
+  go3(~E, ~f, d, e, x1, x2, x3, x4, oa, ob, oc)
+
+# one bang over 2^d leaves with 3 new outputs of 2^c.. cells, made on the device
+@unsafe
+def run3_new(~E: Data, ~f: @+t: U32 -> @+l: U32 -> @+e: E -> Array<F32> -> Array<F32> -> Array<F32> -> Array<F32> -> O3 -> O3, +d: Nat, +e: E, x1: Array<F32>, x2: Array<F32>, x3: Array<F32>, x4: Array<F32>, +ca: Nat, +cb: Nat, +cc: Nat) -> R3:
+  go3_new(~E, ~f, d, e, x1, x2, x3, x4, ca, cb, cc)
+
+@unsafe
+def tree4(~E: Data, ~f: @+t: U32 -> @+l: U32 -> @+e: E -> Array<F32> -> Array<F32> -> Array<F32> -> Array<F32> -> O4 -> O4, +d: Nat, +t: U32, +l: U32, +e: E, +x1: Array<F32>, +x2: Array<F32>, +x3: Array<F32>, +x4: Array<F32>, +oa: Array<F32>, +ob: Array<F32>, +oc: Array<F32>, +od: Array<F32>) -> O4:
+  match d:
+    case 0n: f(t, l, e, x1, x2, x3, x4, O4{oa, ob, oc, od})
+    case 1n+q:
+      x y = tree4(~E, ~f, q, (t * 2 : U32), l, e, x1, x2, x3, x4, oa, ob, oc, od) tree4(~E, ~f, q, ((t * 2 : U32) + 1 : U32), l, e, x1, x2, x3, x4, oa, ob, oc, od)
+      join4(x, y)
+
+@unsafe
+def root4(~E: Data, ~f: @+t: U32 -> @+l: U32 -> @+e: E -> Array<F32> -> Array<F32> -> Array<F32> -> Array<F32> -> O4 -> O4, +d: Nat, +e: E, +x1: Array<F32>, +x2: Array<F32>, +x3: Array<F32>, +x4: Array<F32>, oa: Array<F32>, ob: Array<F32>, oc: Array<F32>, od: Array<F32>) -> O4:
+  tree4(~E, ~f, d, 0, U32.pow(2, d), e, x1, x2, x3, x4, oa, ob, oc, od)
+
+@unsafe
+def root4_new(~E: Data, ~f: @+t: U32 -> @+l: U32 -> @+e: E -> Array<F32> -> Array<F32> -> Array<F32> -> Array<F32> -> O4 -> O4, +d: Nat, +e: E, +x1: Array<F32>, +x2: Array<F32>, +x3: Array<F32>, +x4: Array<F32>, +ca: Nat, +cb: Nat, +cc: Nat, +cd: Nat) -> O4:
+  root4(~E, ~f, d, e, x1, x2, x3, x4, Array.new(F32, ca, 0.0), Array.new(F32, cb, 0.0), Array.new(F32, cc, 0.0), Array.new(F32, cd, 0.0))
+
+@unsafe
+def go4(~E: Data, ~f: @+t: U32 -> @+l: U32 -> @+e: E -> Array<F32> -> Array<F32> -> Array<F32> -> Array<F32> -> O4 -> O4, +d: Nat, +e: E, +x1: Array<F32>, +x2: Array<F32>, +x3: Array<F32>, +x4: Array<F32>, oa: Array<F32>, ob: Array<F32>, oc: Array<F32>, od: Array<F32>) -> R4:
+  R4{x1, x2, x3, x4, root4!(~E, ~f, d, e, x1, x2, x3, x4, oa, ob, oc, od)}
+
+@unsafe
+def go4_new(~E: Data, ~f: @+t: U32 -> @+l: U32 -> @+e: E -> Array<F32> -> Array<F32> -> Array<F32> -> Array<F32> -> O4 -> O4, +d: Nat, +e: E, +x1: Array<F32>, +x2: Array<F32>, +x3: Array<F32>, +x4: Array<F32>, +ca: Nat, +cb: Nat, +cc: Nat, +cd: Nat) -> R4:
+  R4{x1, x2, x3, x4, root4_new!(~E, ~f, d, e, x1, x2, x3, x4, ca, cb, cc, cd)}
+
+# one bang over 2^d leaves with 4 outputs written in place
+@unsafe
+def run4(~E: Data, ~f: @+t: U32 -> @+l: U32 -> @+e: E -> Array<F32> -> Array<F32> -> Array<F32> -> Array<F32> -> O4 -> O4, +d: Nat, +e: E, x1: Array<F32>, x2: Array<F32>, x3: Array<F32>, x4: Array<F32>, oa: Array<F32>, ob: Array<F32>, oc: Array<F32>, od: Array<F32>) -> R4:
+  go4(~E, ~f, d, e, x1, x2, x3, x4, oa, ob, oc, od)
+
+# one bang over 2^d leaves with 4 new outputs of 2^c.. cells, made on the device
+@unsafe
+def run4_new(~E: Data, ~f: @+t: U32 -> @+l: U32 -> @+e: E -> Array<F32> -> Array<F32> -> Array<F32> -> Array<F32> -> O4 -> O4, +d: Nat, +e: E, x1: Array<F32>, x2: Array<F32>, x3: Array<F32>, x4: Array<F32>, +ca: Nat, +cb: Nat, +cc: Nat, +cd: Nat) -> R4:
+  go4_new(~E, ~f, d, e, x1, x2, x3, x4, ca, cb, cc, cd)
