@@ -72,6 +72,10 @@ NOTES exp. 10).
   loops with an accumulator). Check scaling with `--threads 1` against `--threads 16`, and read the emitted
   C (`bend X.bend -o x.c`) when it does not scale. (Up to 2.0.36 a parallel let silently became sequential
   when the def's last parameter was erased, NOTES exp. 11; fixed in 2.0.37 by bendlang/bend#1377.)
+- On the GPU a lane has a 2,048-word stack: a non-tail recursion inside a `!` faults past it ("memory fault (machine
+  stack overflow?)", e.g. `List.append` over 1,023 elements) while `--gpu off` runs; use tail loops in bangs (bendlang/bend
+  #1393). Every device loop also polls for errors, which costs 3.5-20x on loops with little work a step (a draft issue
+  in bend-ml's `docs/upstream/gpu-error-poll.md`); loops that read memory pay 1.2-1.9x.
 - `IO.fork` gives concurrency, not parallelism: forked computations take turns on one event loop
   (NOTES exp. 12). This is intended; the guide says so since bendlang/bend#1415. Use parallel lets in pure
   code for several cores.
