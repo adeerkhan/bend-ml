@@ -1236,3 +1236,7 @@ through pull request #14 (CI green).
 - Left: the leaves' lane order is dealt at run time inside each group of 128, so `matmul_nt`'s loads take 16 sectors a
   request; the device loops' error poll (an upstream issue draft). No law about the package: its guarantee is the bit
   test.
+- bend-lint: 2 findings, `performance/gpu_fit` on `tree_new!` and `tree!` (arrays read across PCIe; "time with and
+  without `--gpu off`"). Timed: the same bangs on the GPU against `--gpu off` (16 CPU threads), 2 runs each, another job
+  running: x·Wᵀ 256 x 576 → 1536 8.4-8.5 vs 12.2-12.3 ms; 512 x 4096 x 512 11-13 vs 55-56 ms. The GPU wins, so the
+  findings are the expected ones (the lint says so for that case).
