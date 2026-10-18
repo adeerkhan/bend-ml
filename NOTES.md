@@ -1259,3 +1259,19 @@ through pull request #14 (CI green).
   from a clean folder, `tests/cap.bend` against the published package prints 0 and `--verdict` checks. The demos and
   benchmarks point at it; tensor-fork 0.1.1.0 and tensor-gpu 0.1.0.0 keep 0.1.12.0 (their `Mat` is that version's), so
   `reference/test_published.py` now reads the version each one imports. `make check` 69/69.
+
+## bend-ml-tensor-gpu 0.1.1.0: bangs over any leaf code (2026-10-18; not published yet)
+
+- Why: putting a whole training step on the GPU (BendTorch) needed bangs for the element-wise layers, RMSNorm, RoPE,
+  attention and the optimizer, and those bangs wrote `@unsafe` in BendTorch's own files. Renan's decision (2026-10-18):
+  the sharing goes into a bend-ml package and BendTorch keeps only the per-leaf math.
+- `run1`..`run4` (outputs in place) and `run1_new`..`run4_new` (outputs made inside the bang): one bang over 2^d leaves,
+  leaf t of l gets t, l, a `Data` record of scalars, four input arrays and its outputs. The leaf is a template written in
+  plain Bend, taking every array as an ordinary argument, so its author writes no `@unsafe`. Helpers `depth`, `share`
+  and `none`. Written by `scripts/gen_tensor_gpu.py`; 31 new unsafe defs, pinned in `check_all.py`.
+- `tests/kernels.bend`: each of the eight against its leaf run once over every cell on the host, on 1, 7, 1000, 16389
+  and 70000 cells, outputs and inputs: "0 0" on the GPU and on 1 and 16 CPU threads. Breaking a tree (both children on
+  the same index) makes it fail at every size above one leaf.
+- Kept on tensor-array 0.1.12.0, like tensor-fork: BendTorch takes both, and its `Mat` must be one version. The
+  products call `cap_depth` only on the host, where 0.1.12.0's was cheap.
+- `make check` 74/74.
