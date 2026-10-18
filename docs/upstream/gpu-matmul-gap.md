@@ -57,12 +57,19 @@ And the whole runtime is one kernel, so the matmul's loop runs with the register
 which caps the resident lanes.
 
 What I could reproduce: adding the index mask, the poll and Bend's occupancy to the handwritten kernel makes it 1.25-1.35x
-slower (1.45-1.7 ms). What I could not: the rest of the main pass's gap (Bend 3.6-4.5 ms against those 1.45-1.7 ms). The
-leaf count (4,096 to 16,384 leaves give the same ratio), the lane order (leaf k runs on lane k), unrolling (the
-handwritten kernel without unrolling is not slower) and the data layout (the same in both) are ruled out.
+slower (1.45-1.7 ms). The rest is coalescing. Bend's loads cost 16.45 sectors a request against 8.5 handwritten, and
+40.5 M sectors come from L2 against 5.7 M: the warps do not hold the leaves the layout assumes. Each block of 128
+threads runs one aligned range of 128 leaves, but inside the block the leaves are dealt to threads in an order that
+changes from run to run (`gpu-leaf-order.md`, a separate issue). Renumbering the leaves to fit the order I observed most
+often (a permutation of the low 7 bits) brings the matmul to 9.39 sectors a request, 12.7 M from L2, and 3.16 ms a
+product (from 4.3, the same results). Ruled out: the leaf count (4,096 to 16,384 leaves give the same ratio), unrolling
+(the handwritten kernel without unrolling is not slower), managed memory (the handwritten kernel in one managed heap
+runs as fast) and the data layout (the same in both).
 
 ## Questions
 
+- Could a balanced tree's leaves be dealt to threads in a fixed order, or could a bang expose the thread's index? (the
+  separate issue)
 - Could the tree be grown on more than one group, or could a bang over a known balanced tree skip the grow?
 - Is there a way to keep a bang's blocks on the device between bangs (no host touches until the result is read)?
 - Could a spin's array masks be computed once per spin when its arrays are passed unchanged (the common case in a flat
