@@ -1,10 +1,20 @@
 # Draft issue for bendlang/bend: the C backend never emits fused multiply-add
 
-Status: draft (2026-10-17), not posted; Renan posts it. Checked for duplicates on 2026-10-18 (searched "FMA",
-"fused multiply", "fp-contract", "march", "f32_rewrap"): none. Reproduced on Bend 2.0.37, clang 22.1.8, Core Ultra 7
-155H. Not to be posted before the speed is measured (2026-10-18, Renan): the timing of `-O3`, `-O3 -march=native` and
-`+ -ffp-contract=fast` is in BendTorch's `docs/plan.md` ("For the next idle-machine run"). If the native target gains
-little, this stays a draft; if it gains clearly, the issue becomes one about an opt-in target flag, FMA a detail.
+Status: draft (2026-10-17), not posted, and not to be posted as a speed issue: timed on an idle machine on 2026-10-18,
+the native target gains little and fusion loses (below). Checked for duplicates on 2026-10-18 (searched "FMA", "fused
+multiply", "fp-contract", "march", "f32_rewrap"): none. Reproduced on Bend 2.0.37, clang 22.1.8, Core Ultra 7 155H.
+
+Timing (idle machine, the same emitted C built three ways; one SmolLM2-135M AdamW step in pure Bend, 1 thread pinned to a
+P-core and 16 threads, 3 alternated rounds; each build gives the same bits on 1 and 16 threads):
+
+| clang flags | 1 thread | 16 threads | `fma_dot` repeated 2,000 times |
+|---|---:|---:|---:|
+| `-std=c11 -O3` (what `bend -o` does) | 17.27 s | 5.34 s | 947 ms |
+| `-std=c11 -O3 -march=native` | 17.05 s | 5.07 s | 934 ms |
+| `-std=c11 -O3 -march=native -ffp-contract=fast` | 23.96 s | 6.31 s | 1,790 ms |
+
+The native target is 1-5% faster; the fused build is 18-39% slower on the model and 1.89x slower on the dot product. I
+have not found why. What stays true below is the code-generation fact, worth at most a line in a broader issue.
 
 ---
 
@@ -23,7 +33,8 @@ them:
    ```
 
    `f32_rewrap`/`f32_unbox` are `union` puns. clang's default `-ffp-contract=on` fuses only within one expression, and
-   the pun splits it, so nothing fuses.
+   the pun splits it, so nothing fuses. On top of that, the emitted C starts with `#pragma clang fp contract(off)`, so
+   the file itself asks clang not to fuse; only `-ffp-contract=fast` overrides the pragma.
 
 `fma_dot.bend` (a dot product of two 1,048,576-number arrays, one running sum):
 
@@ -38,7 +49,7 @@ the hot product loop among them (`vfmadd213ps`).
 
 ## Why it may matter
 
-- Speed: an FMA does a multiply and an add in one instruction. I have not measured the gain on Bend's products yet.
+- Speed: an FMA does a multiply and an add in one instruction, but measured here it made Bend's code slower (above).
 - Accuracy: one rounding per term instead of two. In my measurement it did not change much: the gradients of that
   transformer had the same error against float64 with and without fusion. So this is mostly about speed.
 - Determinism: fusion changes bits (the loss's last bits moved), but a fused build was still identical on 1 and 16
