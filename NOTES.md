@@ -1243,3 +1243,15 @@ through pull request #14 (CI green).
 - Published on BendHub (Renan's decision, 2026-10-18): `bend-ml-tensor-gpu@0.1.0.0`, hash
   `0xb00297062e21c56b88008f0c5387c0a0`; imported from BendHub in a clean folder, a 3 x 4 x 5 product right on the GPU and
   with `--gpu off`; `reference/test_published.py` checks its product against tensor-array's.
+
+## tensor-array 0.1.13.0: cap_depth without a walk of n (2026-10-18; not published yet)
+
+- Found while putting a whole training step on the GPU: a bang whose root computed `cap_depth(786432)` took ~152 ms,
+  against ~9 ms without it. `cap_dbl` doubles p in log2(n) steps, but each step compared with `leb`, a def of mine that
+  walks both `Nat`s one step at a time, so n steps in all on one GPU lane. Base's `Nat.add`, `Nat.sub` and `Nat.cmp`
+  (hence `Nat.is_le`) compile to one native operation each (read in the emitted C); my `leb` does not.
+- Fix: `cap_dbl` and `cap_depth` compare with `Nat.is_le`, and `le_leb` proves `Nat.is_le(a, b) == leb(a, b)` case for
+  case, so the law `cap_ok` keeps its statement word for word. `--verdict` ok, `tests/cap.bend` 0 mismatches, `make
+  check` 69/69.
+- A bang that only computes `cap_depth(768 · 1024)`, 20 calls, RTX 4050 Laptop (machine not idle): 2.57 s with 0.1.12.0,
+  0.09 s with this one, the same result; with `--gpu off`, 0.01 against 0.00 s (on the host it never cost much).
