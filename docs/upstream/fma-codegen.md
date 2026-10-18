@@ -41,7 +41,7 @@ the hot product loop among them (`vfmadd213ps`).
   transformer had the same error against float64 with and without fusion. So this is mostly about speed.
 - Determinism: fusion changes bits (the loss's last bits moved), but a fused build was still identical on 1 and 16
   threads, since the order of operations is fixed either way. Projects that need bit-exact results across machines
-  (with or without FMA) would want it to be opt-in, which is how Stelliferous builds today (`-ffp-contract=off`).
+  (with or without FMA) would want it to be opt-in; some build with `-ffp-contract=off` today for that reason.
 
 ## Possible directions
 
