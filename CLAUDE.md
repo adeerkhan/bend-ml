@@ -42,7 +42,10 @@ NOTES exp. 10).
    recorded in `NOTES.md` as debt and left out of the README. Two packages stand outside the proofs, by Renan's
    decision, and no package with laws imports them: `binary-read` (foreign code, one def) and `tensor-fork` (Base's
    `@unsafe` `Array.fork`, all Bend; decided 2026-10-16). `make check` pins the list of defs each one has outside the
-   proofs, so it cannot grow unnoticed. A new exception is Renan's call.
+   proofs, so it cannot grow unnoticed. A third, approved by Renan on 2026-10-18 and not written yet: the GPU products
+   package (matrix products forward and backward under `!`, with Base's `@unsafe` `Array.fork`/`Array.join`, all Bend),
+   under the same terms: no package with laws imports it, `make check` pins its defs outside the proofs, and it is
+   tested against the CPU products. A new exception is Renan's call.
 4. Prove structure (shapes, sizes, composition); test numbers. `F32` is not a real number, so numerics
    are validated against PyTorch / NumPy / tiktoken by the scripts in `reference/`.
 5. Every proved law appears in its package README in plain language, and in `reference/list_laws.py`.
