@@ -2,7 +2,8 @@
 
 Status: draft (2026-10-18), not posted; Renan posts it. Checked for duplicates on 2026-10-18 (searched "err_spun",
 "WL_SPIN", "YIELD", "error poll", "GPU slow loop"): none; the closest is #1143 (Metal, heap_free's error check, closed).
-The times were taken with the CPU in use and the GPU idle; the ratios are large and stable across runs, but they are
+Still in upstream main at e5527d5b (`err_spun` and `WL_SPIN` unchanged). Metal uses the same poll on the device; I have
+no Metal machine to measure it. The times were taken with the CPU in use and the GPU idle; the ratios are large and stable across runs, but they are
 rerun on an idle machine before posting (BendTorch launch plan, idle round 2).
 
 ---
