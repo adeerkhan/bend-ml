@@ -1,7 +1,7 @@
 # bend-ml-tensor-gpu: tensor-array's products on the GPU, with tensor-array's bits.
 #
-#   import bend-ml-tensor-array@0.1.13.0/main.bend as TA
-#   import bend-ml-tensor-gpu@0.1.1.1/main.bend as TG
+#   import ../tensor-array/main.bend as TA
+#   import bend-ml-tensor-gpu@0.1.2.0/main.bend as TG
 #   TG.matmul(n, k, m, par, a, b)      # the same arguments, result type and bits as TA.Mat.matmul
 #
 # The six products (matmul, matmul_nt, matmul_tn and their accumulating forms) take tensor-array's Mat values and return
@@ -22,7 +22,7 @@
 # writes only its own tile of C, or never writes A or B; the tiles are disjoint by construction (leaf t writes tile t).
 # All of it is Bend: no foreign code. Written by bend-ml's scripts/gen_tensor_gpu.py (4 x 4 tiles).
 import Base
-import bend-ml-tensor-array@0.1.13.0/main.bend as TA
+import bend-ml-tensor-array@0.1.14.0/main.bend as TA
 
 # the sizes and strides of one product: C[i][j] = sum_p A[i*arow + p*sa] * B[p*sb + j*bcol], n x m, k steps
 type E is Data:
@@ -527,3 +527,45 @@ def run4(~E: Data, ~f: @+t: U32 -> @+l: U32 -> @+e: E -> Array<F32> -> Array<F32
 @unsafe
 def run4_new(~E: Data, ~f: @+t: U32 -> @+l: U32 -> @+e: E -> Array<F32> -> Array<F32> -> Array<F32> -> Array<F32> -> O4 -> O4, +d: Nat, +e: E, x1: Array<F32>, x2: Array<F32>, x3: Array<F32>, x4: Array<F32>, +ca: Nat, +cb: Nat, +cc: Nat, +cd: Nat) -> R4:
   go4_new(~E, ~f, d, e, x1, x2, x3, x4, ca, cb, cc, cd)
+
+# ---- tensor-array 0.1.14.0's precise product on the GPU (opt-in) ----
+# TA.Mat.matmul_precise's composition, each block one bang: the first block's product made on the device, each next
+# one added into C (the accumulating kernel adds a cell once, as tensor-array's cwr), so the same bits as tensor-array's
+# (tests/bits.bend). The slices of A and B are copied on the host, which pulls their pages back from the device: this
+# is for accuracy, not speed.
+
+def abc_g(a: Array<F32>, b: Array<F32>, r: ABC) -> TA.G:
+  match r:
+    case ABC{x, y, c}: TA.G{a, b, c}
+
+@unsafe
+def mp_s3(+ac: Bool, +n: Nat, +m: Nat, +w: Nat, +w32: U32, +m32: U32, a: Array<F32>, as: Array<F32>, c: Array<F32>, sb: TA.SL) -> TA.G:
+  match ac sb:
+    case True{} TA.SL{b, bs}: abc_g(a, b, gemm(True{}, n, m, w, w32, 1, m32, 1, as, bs, c))
+    case False{} TA.SL{b, bs}: abc_g(a, b, gemm_new(n, m, w, w32, 1, m32, 1, as, bs))
+
+@unsafe
+def mp_s2(+ac: Bool, +n: Nat, +m: Nat, +w: Nat, +w32: U32, +m32: U32, +o: U32, c: Array<F32>, b: Array<F32>, sa: TA.SL) -> TA.G:
+  match sa:
+    case TA.SL{a, as}: mp_s3(ac, n, m, w, w32, m32, a, as, c, TA.sl_row(Nat.mul(w, m), (o * m32 : U32), 0, Array.new(F32, TA.cap_depth(Nat.mul(w, m)), 0.0), Array.get(F32, b, (o * m32 : U32))))
+
+@unsafe
+def mp_step(+ac: Bool, +n: Nat, +m: Nat, +k32: U32, +bi: U32, a: Array<F32>, b: Array<F32>, c: Array<F32>) -> TA.G:
+  mp_s2(ac, n, m, TA.blk_len(bi, k32), U32.from_nat(TA.blk_len(bi, k32)), U32.from_nat(m), (bi * 1024 : U32), c, b, TA.sl_rows(n, 0, TA.blk_len(bi, k32), U32.from_nat(TA.blk_len(bi, k32)), k32, (bi * 1024 : U32), TA.SL{a, Array.new(F32, TA.cap_depth(Nat.mul(n, TA.blk_len(bi, k32))), 0.0)}))
+
+@unsafe
+def mp_go(nb: Nat, +bi: U32, +n: Nat, +m: Nat, +k32: U32, g: TA.G) -> TA.G:
+  match nb g:
+    case 0n g: g
+    case 1n++q TA.G{a, b, c}: mp_go(q, (bi + 1 : U32), n, m, k32, mp_step(U32.is_lt(0, bi), n, m, k32, bi, a, b, c))
+
+@unsafe
+def mm_precise2(long: Bool, +n: Nat, +k: Nat, +m: Nat, +par: Nat, a: TA.Mat<n, k>, b: TA.Mat<k, m>) -> TA.MMul<n, k, m>:
+  match long a b:
+    case True{} TA.Mat{x} TA.Mat{y}: TA.mmul_fin(n, k, m, mp_go(U32.to_nat(U32.div((U32.from_nat(k) + 1023 : U32), 1024)), 0, n, m, U32.from_nat(k), TA.G{x, y, none(Unit{})}))
+    case False{} a b: matmul(n, k, m, par, a, b)
+
+# C = A · B with k summed in blocks of 1024: TA.Mat.matmul_precise's bits (opt-in)
+@unsafe
+def matmul_precise(+n: Nat, +k: Nat, +m: Nat, +par: Nat, a: TA.Mat<n, k>, b: TA.Mat<k, m>) -> TA.MMul<n, k, m>:
+  mm_precise2(Nat.is_lt(1024n, k), n, k, m, par, a, b)
