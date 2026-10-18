@@ -1244,7 +1244,7 @@ through pull request #14 (CI green).
   `0xb00297062e21c56b88008f0c5387c0a0`; imported from BendHub in a clean folder, a 3 x 4 x 5 product right on the GPU and
   with `--gpu off`; `reference/test_published.py` checks its product against tensor-array's.
 
-## tensor-array 0.1.13.0: cap_depth without a walk of n (2026-10-18; not published yet)
+## tensor-array 0.1.13.0: cap_depth without a walk of n (2026-10-18)
 
 - Found while putting a whole training step on the GPU: a bang whose root computed `cap_depth(786432)` took ~152 ms,
   against ~9 ms without it. `cap_dbl` doubles p in log2(n) steps, but each step compared with `leb`, a def of mine that
@@ -1255,3 +1255,7 @@ through pull request #14 (CI green).
   check` 69/69.
 - A bang that only computes `cap_depth(768 · 1024)`, 20 calls, RTX 4050 Laptop (machine not idle): 2.57 s with 0.1.12.0,
   0.09 s with this one, the same result; with `--gpu off`, 0.01 against 0.00 s (on the host it never cost much).
+- Published (Renan's decision, 2026-10-18): `bend-ml-tensor-array@0.1.13.0`, hash `0xf73c9a4e5c212ca51adae9ad129e57f7`;
+  from a clean folder, `tests/cap.bend` against the published package prints 0 and `--verdict` checks. The demos and
+  benchmarks point at it; tensor-fork 0.1.1.0 and tensor-gpu 0.1.0.0 keep 0.1.12.0 (their `Mat` is that version's), so
+  `reference/test_published.py` now reads the version each one imports. `make check` 69/69.
