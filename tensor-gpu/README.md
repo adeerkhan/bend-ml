@@ -5,7 +5,8 @@ forms), with the same arguments, result types and **bits**, each run as one `!` 
 when there is one. It is **not proved**, and says so: like [`bend-ml-tensor-fork`](../tensor-fork), it shares arrays
 between the leaves of a fork tree through Base's `@unsafe` `Array.fork`.
 
-- Bend: **2.0.37** · License: MIT · Depends on `bend-ml-tensor-array@0.1.12.0`. Not published to BendHub yet.
+- Bend: **2.0.37** · License: MIT · Depends on `bend-ml-tensor-array@0.1.12.0`. Published on BendHub as
+  `bend-ml-tensor-gpu@0.1.0.0` (hash `0xb00297062e21c56b88008f0c5387c0a0`, 2026-10-18).
 - `bend tensor-gpu/main.bend` → `SOME PROOFS FAIL`, naming the 18 defs that rely on `@unsafe` code. All of it is Bend:
   no foreign code, no CUDA written by hand.
 - Tests: `tests/bits.bend`, against tensor-array, bit for bit, on the GPU, on 1 and 16 CPU threads and on the JS lane.

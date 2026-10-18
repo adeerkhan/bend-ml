@@ -1240,3 +1240,6 @@ through pull request #14 (CI green).
   without `--gpu off`"). Timed: the same bangs on the GPU against `--gpu off` (16 CPU threads), 2 runs each, another job
   running: x·Wᵀ 256 x 576 → 1536 8.4-8.5 vs 12.2-12.3 ms; 512 x 4096 x 512 11-13 vs 55-56 ms. The GPU wins, so the
   findings are the expected ones (the lint says so for that case).
+- Published on BendHub (Renan's decision, 2026-10-18): `bend-ml-tensor-gpu@0.1.0.0`, hash
+  `0xb00297062e21c56b88008f0c5387c0a0`; imported from BendHub in a clean folder, a 3 x 4 x 5 product right on the GPU and
+  with `--gpu off`; `reference/test_published.py` checks its product against tensor-array's.
