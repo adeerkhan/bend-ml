@@ -1,6 +1,6 @@
 # Draft issue for bendlang/bend: a safe way to give a fork tree's leaves disjoint parts of one Array to write
 
-Status: draft (2026-10-18), not posted; Renan posts it. Checked on 2026-10-18 (searched "Array.fork", "Array.join",
+Status: posted as https://github.com/bendlang/bend/issues/1777 (2026-10-19, by Claude Code with Renan's go-ahead), in the Feature form's fields; no duplicate on a recheck the same day. Checked on 2026-10-18 (searched "Array.fork", "Array.join",
 "borrow", "disjoint", "shared array", "split array"): no issue asks for it. Related: #1376 (a read-only borrow, opened by
 Renan; this is its counterpart for writes), #885 (where `Array.fork`/`Array.join` were introduced for an `@unsafe` def),
 PR #1278 (the histogram bench, whose description says "Bend has no safe way to give lanes disjoint slices of one array").
