@@ -1,6 +1,6 @@
 # Draft issue for bendlang/bend: the error poll in every device loop slows tight loops on CUDA
 
-Status: draft (2026-10-18), not posted; Renan posts it. Checked for duplicates on 2026-10-18 (searched "err_spun",
+Status: posted as https://github.com/bendlang/bend/issues/1776 (2026-10-19, by Claude Code with Renan's go-ahead), in the Bug form's fields. Checked for duplicates on 2026-10-18 (searched "err_spun",
 "WL_SPIN", "YIELD", "error poll", "GPU slow loop") and again on 2026-10-19 ("poll", "err_spun", "gpu error"): none;
 the closest is #1143 (Metal, heap_free's error check, closed). Still in upstream main at 881cb2e5 (2026-10-19; `err_spun`
 and `WL_SPIN` unchanged, and `split-poll.patch` applies as is). Every table was rerun on an idle machine on 2026-10-19,
