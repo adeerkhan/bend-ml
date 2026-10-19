@@ -35,6 +35,11 @@ threadIdx.x` instead of `t`, built it as `bend -o` does, and ran it three times:
 - a warp's 32 leaves spread over the block's whole range, so a read of element j of leaf t at `j * 16384 + t` touches 16
   sectors of 32 bytes per warp in every run (Nsight Compute: 15.9 sectors a request; 4 would be coalesced).
 
+The layout matters even with this order: 200,000 reads a leaf over one shared 2^26-number block take 170 ms interleaved
+(element j of leaf t at `j * 16384 + t`), 309 ms with each leaf's cells contiguous and 473 ms interleaved by the
+bit-reversed leaf index (idle machine, driver 615.78.08, medians of 5 runs); an empty bang over the same tree takes
+1.26 ms.
+
 What it costs: a tiled matmul whose layout assumes neighbouring leaves on neighbouring threads reads 16.45 sectors a
 request against 8.5 for the same kernel handwritten in CUDA. Renumbering the leaves with a permutation of the low 7 bits
 that fits the most frequent order gets it to 9.39 and makes the product 1.35x faster (4.3 -> 3.16 ms), but that is a
