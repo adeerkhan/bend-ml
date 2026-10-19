@@ -14,7 +14,7 @@ on `apple_m4`. Nothing runs the CUDA lane, and it differs from Metal in ways the
 PCIe instead of unified memory, the shared-memory reservation that PR #1602 changes, register counts and occupancy, and
 NVRTC's code generation. Three things I found on an RTX 4050 Laptop with Bend 2.0.37 that no gate would report:
 
-- the device loops' error poll costs 3.5-20x on tight loops on CUDA (a separate issue: [link once posted]);
+- the device loops' error poll costs 4-20x on tight loops on CUDA (a separate issue: [link once posted]);
 - #1393's lane-stack fault reproduces on CUDA at the same depths (comment on #1393: [link]);
 - PR #1602 changes CUDA kernels by 0.94-2.24x (comment on #1602: [link]).
 

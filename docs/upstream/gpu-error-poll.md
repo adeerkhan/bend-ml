@@ -1,4 +1,4 @@
-# Draft issue for bendlang/bend: the error poll in every device loop slows tight loops 3.5-20x on CUDA
+# Draft issue for bendlang/bend: the error poll in every device loop slows tight loops 4-20x on CUDA
 
 Status: draft (2026-10-18), not posted; Renan posts it. Checked for duplicates on 2026-10-18 (searched "err_spun",
 "WL_SPIN", "YIELD", "error poll", "GPU slow loop"): none; the closest is #1143 (Metal, heap_free's error check, closed).
@@ -10,7 +10,7 @@ patch is below in full.
 ---
 
 **Title:** CUDA: the error poll in every flat loop (`err_spun`) makes ptxas yield on each iteration; tight loops run
-3.5-20x slower
+4-20x slower
 
 ## Summary
 
