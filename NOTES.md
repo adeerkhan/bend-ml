@@ -1312,3 +1312,12 @@ through pull request #14 (CI green).
   3 alternated runs: 963-979 ms with 0.1.2.0, 690-702 with 0.1.2.1 (679-697 before the precise dX), the same losses.
   `tests/precise.bend`, `bits.bend` and `kernels.bend` pass on the GPU and the CPU threads; `make check` 82/82 once
   published.
+
+## bend-ml-tensor and bend-ml-autograd frozen (2026-10-19)
+
+- My decision: bend-ml is the foundation (nat-lemmas, tensor-array, tensor-fork, tensor-gpu, bpe-tokenizer, and
+  binary-read until Bend reads files natively), with no models. `bend-ml-tensor` (lists of rows) is superseded by
+  tensor-array, and `bend-ml-autograd`'s layers and training move to a separate training library. Neither gets a new
+  version; the published ones stay on the hub, and the demos here keep importing them (`bend-ml-tensor@0.1.2.0`,
+  `bend-ml-autograd@0.1.1.0`). Their hub descriptions stay as they are until a version would change them.
+- llama.bend is moving its last five list helpers off `bend-ml-tensor` into its own code (llama.bend NOTES).
