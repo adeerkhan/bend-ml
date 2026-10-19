@@ -14,8 +14,8 @@ I wrote a tiled matmul with the one-block pattern of `tests/run/stencil3d.bend` 
 array, one 4x4 block of C a leaf over 2^14 leaves, A stored transposed so lanes read neighbouring cells), and the same
 kernel in CUDA (same thread mapping, layouts and data, compiled with NVRTC, `--fmad=false` as Bend's device build). On an
 RTX 4050 Laptop, idle machine, Bend 2.0.37: 512x512x4096 takes 4.34 ms a product in Bend and 1.10 ms handwritten
-(3.95x; 4.78 ms on driver 610.57.04), and 256x1536x576 1.01 ms against 0.23 (4.5x); a K
-sweep gives ~1.0 µs a K step in Bend against ~0.27 µs, plus ~0.7 ms a bang. The best tile in each (8x4) gives 3.48
+(3.95x; 4.78 ms on driver 610.57.04), and 256x1536x576 2.02 ms against 0.23 (9.0x; this smaller product pays the bang's fixed cost more); a K
+sweep gives ~1.0 µs a K step in Bend against ~0.26 µs, plus ~0.7 ms a bang. The best tile in each (8x4) gives 3.48
 against 0.81 ms. Results are the same bits in both. This is where the time goes, with Nsight Systems and Nsight Compute.
 
 ## A bang's fixed cost (~0.8-1.4 ms)
