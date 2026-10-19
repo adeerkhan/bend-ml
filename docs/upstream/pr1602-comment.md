@@ -1,6 +1,6 @@
 # Draft comment for bendlang/bend PR #1602 (static `vote[3]`, 0 dynamic shared bytes on CUDA)
 
-Status: draft (2026-10-18), not posted; Renan posts it. The timings are from an idle machine (alternated rounds, driver
+Status: discarded (2026-10-19, Renan): PR #1602 was merged on 2026-10-19, before it was posted. The timings are from an idle machine (alternated rounds, driver
 610.57.04); the Nsight Compute lines from a busy CPU (driver 615.78.08), counts and occupancy only.
 
 ---
