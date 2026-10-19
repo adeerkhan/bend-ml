@@ -20,6 +20,10 @@ Numbers from another CUDA GPU, in case they help: RTX 4050 Laptop (sm_89, 20 SMs
 | tiled matmul 512x512x4096 (4x4 a leaf), 50 products | 442 ms | 470 ms | 0.94x |
 | tiled matmul 256x1536x576 (4x4 a leaf), 100 products | 200 ms | 196 ms | 1.02x |
 
+Two of them again on driver 615.78.08, another idle machine run (5 alternated rounds, the same binaries): the
+interleaved reads 170 -> 115 ms (1.48x), the 512x512x4096 matmul 216 -> 231 ms (0.94x). Both builds of the matmul take
+half the time they took on 610.57.04; the ratio is the same.
+
 One more effect besides L1: occupancy. The device program of the matmul uses 80 registers, so
 `cuOccupancyMaxActiveBlocksPerMultiprocessor` gives 6 blocks of 128 lanes per SM with 0 dynamic shared bytes and 5 with
 18,432 (`TG_HOLD * 8`): 12,800 lanes at once instead of 15,360, while the launch asks for 128 groups (16,384 lanes). The
