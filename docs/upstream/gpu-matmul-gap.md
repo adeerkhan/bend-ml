@@ -1,18 +1,20 @@
 # Draft issue for bendlang/bend: where a tiled matmul's time goes on CUDA, against the same kernel handwritten
 
-Status: draft (2026-10-18), not posted; Renan decides whether and when to post it, after the tables are rerun on an
-idle machine (the ratios below come from a busy CPU and an idle GPU, driver 615.78.08, except where marked idle). It is a
+Status: draft (2026-10-18), not posted; Renan decides whether and when to post it. The headline times were rerun on an
+idle machine on 2026-10-18 (driver 615.78.08, medians of 5 alternated rounds); the breakdowns below come from a busy
+CPU and an idle GPU, except where marked idle. It is a
 measurement report with questions, not a bug. Checked for duplicates on 2026-10-18 (searched "matmul CUDA", "handwritten
 CUDA", "occupancy", "registers", "page fault"): none. Pairs with the poll issue (`gpu-error-poll.md`).
 
 ---
 
-**Title:** A tiled matmul in Bend runs 4.3x slower than the same kernel handwritten in CUDA: where the time goes
+**Title:** A tiled matmul in Bend runs about 4x slower than the same kernel handwritten in CUDA: where the time goes
 
 I wrote a tiled matmul with the one-block pattern of `tests/run/stencil3d.bend` (`Array.fork`/`Array.join`, one block per
 array, one 4x4 block of C a leaf over 2^14 leaves, A stored transposed so lanes read neighbouring cells), and the same
 kernel in CUDA (same thread mapping, layouts and data, compiled with NVRTC, `--fmad=false` as Bend's device build). On an
-RTX 4050 Laptop, idle machine, Bend 2.0.37: 512x512x4096 takes 4.78 ms a product in Bend and 1.10 ms handwritten; a K
+RTX 4050 Laptop, idle machine, Bend 2.0.37: 512x512x4096 takes 4.34 ms a product in Bend and 1.10 ms handwritten
+(3.95x; 4.78 ms on driver 610.57.04), and 256x1536x576 1.01 ms against 0.23 (4.5x); a K
 sweep gives ~1.0 µs a K step in Bend against ~0.27 µs, plus ~0.7 ms a bang. The best tile in each (8x4) gives 3.48
 against 0.81 ms. Results are the same bits in both. This is where the time goes, with Nsight Systems and Nsight Compute.
 
