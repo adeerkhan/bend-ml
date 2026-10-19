@@ -12,7 +12,7 @@ between the leaves of a fork tree through Base's `@unsafe` `Array.fork`.
   0.1.13.0; 0.1.2.0, `matmul_precise` (tensor-array 0.1.14.0's opt-in precise product, a bang a block, its slices copied on the
   host) on tensor-array 0.1.14.0; 0.1.2.1, the same product with every block's bang starting at its place in A and B
   (no copy, no pages pulled back): a SmolLM2-sized block step on the GPU 975 -> ~695 ms for 3 (2026-10-18).
-- `bend tensor-gpu/main.bend` → `SOME PROOFS FAIL`, naming the 49 defs that rely on `@unsafe` code. All of it is Bend:
+- `bend tensor-gpu/main.bend` → `SOME PROOFS FAIL`, naming the 54 defs that rely on `@unsafe` code. All of it is Bend:
   no foreign code, no CUDA written by hand.
 - Tests: `tests/bits.bend`, against tensor-array, bit for bit, on the GPU, on 1 and 16 CPU threads and on the JS lane;
   `tests/kernels.bend`, `run1`..`run4` and `run1_new`..`run4_new` against their leaf run once over every cell, on the
@@ -23,7 +23,7 @@ between the leaves of a fork tree through Base's `@unsafe` `Array.fork`.
 ```python
 import Base
 import bend-ml-tensor-array@0.1.14.0/main.bend as TA
-import bend-ml-tensor-gpu@0.1.1.0/main.bend as TG
+import bend-ml-tensor-gpu@0.1.2.1/main.bend as TG
 
 def prod(x: TA.Mat<256n, 576n>, w: TA.Mat<1536n, 576n>) -> TA.MMulNT<256n, 576n, 1536n>:
   TG.matmul_nt(256n, 576n, 1536n, 0n, x, w)   # instead of TA.Mat.matmul_nt(...); par is ignored

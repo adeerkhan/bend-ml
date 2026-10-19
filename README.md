@@ -13,7 +13,7 @@
 product of mismatched matrices does not compile, and the structural guarantees (a tokenizer that never loses a byte, a
 reverse mode that agrees with the forward mode, a parallel product that covers every row) are laws that Bend's kernel
 checks. Six packages are on BendHub, and two demos run on them: an MNIST classifier that trains, and GPT-2 small, which
-generates the same tokens as PyTorch. The current release is [v1.3.2](https://github.com/nuxyel/bend-ml/releases/tag/v1.3.2).
+generates the same tokens as PyTorch. The current release is [v1.5.0](https://github.com/nuxyel/bend-ml/releases/tag/v1.5.0).
 
 ## 01 · A shape error is a type error
 
@@ -115,8 +115,8 @@ Linux x86_64 (or WSL), clang ≥ 14, Python ≥ 3.12, `curl`, ~3 GB of disk, 8 G
 ```bash
 git clone https://github.com/nuxyel/bend-ml.git && cd bend-ml
 make setup          # Bend 2.0.37 (SHA256-checked), Lean 4.34.0, Python venv, data; no sudo
-make check          # 53 checks, about 2.5 min
-make check-full     # 61 checks with GPT-2 and MNIST, about 5 min
+make check          # 82 checks
+make check-full     # the same plus GPT-2 and MNIST
 make media          # regenerate the figures on this page (needs node, ffmpeg, Brave)
 ```
 
