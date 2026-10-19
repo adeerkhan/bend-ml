@@ -1,6 +1,6 @@
 # Draft issue for bendlang/bend: on CUDA, F32's math primitives give other bits than on the host
 
-Status: draft (2026-10-18), not posted; Renan posts it. Checked on 2026-10-18 (searched "exp CUDA", "F32.exp",
+Status: not posted (2026-10-19): a duplicate of #1305/#1306 (F32.sin on CPU and GPU), closed as a known limit ("one shared software implementation ... would be slower on the GPU"). Rechecked on main 881cb2e5: the same counts. Checked on 2026-10-18 (searched "exp CUDA", "F32.exp",
 "transcendental", "math bits", "expf"): none. Bend 2.0.37, RTX 4050 Laptop, driver 615.78.08, NVRTC 12.9, clang 22.1.8.
 Repro: `gpu_math_bits.bend` (next to this file).
 
