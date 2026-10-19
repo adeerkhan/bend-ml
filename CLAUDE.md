@@ -93,6 +93,11 @@ NOTES exp. 10).
   Indexes wrap around, so never write past a capacity. Corrected 2026-10-13 (NOTES).
 - An `import ... as M` does not re-export. A BendHub package can hold several files (users import each one as
   `pkg@ver/file.bend`; NOTES 2026-10-10, lead 5), but then every caller must import every file it uses.
+  `--publish` sends the entry file and everything it imports (store packages stay out), so a file nothing imports
+  needs an entry that imports it; the entry may have any name. Relative imports inside a published package
+  (`./x.bend`, `../d/x.bend`) resolve; a hub file may import only hub files. Paths: segments `[A-Za-z_][A-Za-z0-9_-]*`
+  (no dots); names `[a-z][a-z0-9-]{0,63}@a.b.c.d` (checked in Bend 2.0.37's source and against a published
+  multi-file package, 2026-10-19).
 - A template (`~l`) is substituted at each use, so a record of functions passed as one is built again wherever it is
   used, and its plain-value fields are computed then. A composite whose value field reads its children
   (`count: count(a) + count(b)`) builds their whole records at every use and drops them: +5% instructions in a
