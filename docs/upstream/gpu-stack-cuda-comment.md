@@ -1,6 +1,6 @@
 # Draft comment for bendlang/bend #1393 (and PR #1439): the same lane-stack limit on CUDA
 
-Status: draft (2026-10-18), not posted; Renan posts it, on #1393 (the issue) or #1439 (the PR that fixes it on Metal).
+Status: posted on PR #1439 (2026-10-19, https://github.com/bendlang/bend/pull/1439#issuecomment-6279729706, by Claude Code with Renan's go-ahead), after checking that main 881cb2e5 still faults.
 #1393 and #1439 show Metal only; I built #1439 (6764c339) and its base (3f9c40e8) from source and ran them on CUDA
 (below).
 
