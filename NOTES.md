@@ -1320,4 +1320,5 @@ through pull request #14 (CI green).
   tensor-array, and `bend-ml-autograd`'s layers and training move to a separate training library. Neither gets a new
   version; the published ones stay on the hub, and the demos here keep importing them (`bend-ml-tensor@0.1.2.0`,
   `bend-ml-autograd@0.1.1.0`). Their hub descriptions stay as they are until a version would change them.
-- llama.bend is moving its last five list helpers off `bend-ml-tensor` into its own code (llama.bend NOTES).
+- llama.bend moved its last five list helpers off `bend-ml-tensor` into its own code, with the same bits (llama.bend
+  NOTES, 2026-10-19).
