@@ -1,7 +1,7 @@
 # Draft issue for bendlang/bend: the CUDA lane is not covered by the test and perf gates
 
-Status: draft (2026-10-18), not posted; Renan decides whether to post it (it is a request, not a bug) and whether to
-offer runs on his RTX 4050. Checked on 2026-10-18 (`gates/test.ts`, `gates/perf.ts`, `.github/workflows/`): the gates
+Status: posted as https://github.com/bendlang/bend/issues/1779 (2026-10-19, by Claude Code with Renan's go-ahead), in
+the Feature form's fields, rewritten against main 881cb2e5 and without the offer to run the tests (Renan's to make). Checked on 2026-10-18 (`gates/test.ts`, `gates/perf.ts`, `.github/workflows/`): the gates
 that run `!` programs run on the cluster of Apple M4 minis (Metal); GitHub Actions runs only `repo-gate`. Searched
 "CUDA CI", "CUDA test": nothing.
 
