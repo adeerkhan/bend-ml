@@ -1,6 +1,10 @@
 # Draft issue for bendlang/bend: where a tiled matmul's time goes on CUDA, against the same kernel handwritten
 
-Status: draft (2026-10-18), not posted; Renan decides whether and when to post it. The headline times were rerun on an
+Status: draft (2026-10-18), not posted; Renan decides whether and when to post it. Rewritten on 2026-10-19 against main
+881cb2e5, which has PR #1602 (no dynamic shared memory at launch): every time below is from that day's idle round
+(bend2-lab `experiments/2026-10-19-leaves-mm-idle/`), the counters from Nsight Compute on main, and the handwritten-twin
+breakdown from 2026-10-18 (busy CPU, idle GPU), as marked. The text below the line is the current one; the older numbers
+(2.0.37) are in git history. The headline times were rerun on an
 idle machine on 2026-10-18 (driver 615.78.08, medians of 5 alternated rounds); the breakdowns below come from a busy
 CPU and an idle GPU, except where marked idle. It is a
 measurement report with questions, not a bug. Checked for duplicates on 2026-10-18 (searched "matmul CUDA", "handwritten
@@ -12,75 +16,80 @@ CUDA", "occupancy", "registers", "page fault"): none. Pairs with the poll issue 
 
 I wrote a tiled matmul with the one-block pattern of `tests/run/stencil3d.bend` (`Array.fork`/`Array.join`, one block per
 array, one 4x4 block of C a leaf over 2^14 leaves, A stored transposed so lanes read neighbouring cells), and the same
-kernel in CUDA (same thread mapping, layouts and data, compiled with NVRTC, `--fmad=false` as Bend's device build). On an
-RTX 4050 Laptop, idle machine, Bend 2.0.37: 512x512x4096 takes 4.34 ms a product in Bend and 1.10 ms handwritten
-(3.95x; 4.78 ms on driver 610.57.04), and 256x1536x576 2.02 ms against 0.23 (9.0x; this smaller product pays the bang's fixed cost more); a K
-sweep gives ~1.0 µs a K step in Bend against ~0.26 µs, plus ~0.7 ms a bang. The best tile in each (8x4) gives 3.48
-against 0.81 ms. Results are the same bits in both. This is where the time goes, with Nsight Systems and Nsight Compute.
+kernel in CUDA (same thread mapping, layouts and data, compiled with NVRTC, `--fmad=false` as Bend's device build). RTX
+4050 Laptop, driver 615.78.08, main 881cb2e5 (with #1602), idle machine, 5 alternated rounds; the results are the same
+bits in both:
 
-## A bang's fixed cost (~0.8-1.4 ms)
+| ms a product | Bend | handwritten | ratio |
+|---|---:|---:|---:|
+| 512x512x4096, 4x4 a leaf | 4.62-4.72 | 1.08-1.23 | 4.3x |
+| 512x512x4096, 8x4 a leaf | 3.44-3.54 | 0.78-0.82 | 4.4x |
+| 256x1536x576, 4x4 a leaf | 2.10-2.17 | 0.224-0.226 | 9.4x |
 
-Each bang launches `bend_dev` four times (`gpu_run`). Nsight Systems, medians:
+From K = 1024 to 4096 (512², 4x4): ~0.97 µs a K step in Bend against ~0.27 µs, plus ~0.7 ms a bang, which is why the
+smaller product does worse. This is where the time goes, with Nsight Systems and Nsight Compute.
+
+## A bang's fixed cost (~1.3 ms empty)
+
+Each bang is five `bend_dev` launches back to back, then the host's turn. Nsight Systems, medians of 19 bangs:
 
 | ms | grow, 1 group | grow, 128 groups | main pass | final | host, between bangs |
 |---|---:|---:|---:|---:|---:|
-| an empty bang over a 2^14-leaf tree | 0.58 | 0.16 | 0.17 | 0.006 | 0.49 |
-| the 512² matmul | 0.33 | 0.15 | 4.50 | 0.009 | 0.27 |
+| an empty bang over a 2^14-leaf tree | 0.55 | 0.10 | 0.11 | 0.007 | 0.58 |
+| the 512² matmul (4x4) | 0.32 | 0.15 | 5.06 | 0.009 | 0.30 |
 
-- The first launch grows the fork tree on one group of 128 lanes; for a balanced 2^14 tree that is up to 0.6 ms before
-  any leaf runs.
-- Between bangs the host and the device trade managed-memory pages: ~335 CPU and ~42 GPU page faults a bang for the
-  empty bang, ~228 and ~10 for the matmul, while the host only reads a result.
+(the fifth launch, between the grows and the main pass, takes ~1 µs). The first launch grows the fork tree on one group of
+128 lanes, so a balanced 2^14 tree costs up to 0.55 ms before any leaf runs, and the host's turn adds about as much. On
+2.0.37 I counted hundreds of CPU page faults a bang in that turn (Bend's heap is managed memory), while the host only
+reads a result.
 
-## The main pass (4.5 ms against 1.04 ms)
+## The main pass
 
-Nsight Compute, application replay (kernel replay restores device memory, and with Bend's managed heap that makes every
-replay fault its pages back in):
+Nsight Compute on main, application replay (kernel replay restores device memory, and with Bend's managed heap that makes
+every replay fault its pages back in):
 
 | | Bend | handwritten |
 |---|---:|---:|
-| warp instructions | 175.6 M | 95.5 M |
+| warp instructions | 175.7 M | 95.5 M |
 | SASS instructions a K step | 83 | ~45 |
-| registers; blocks of 128 per SM | 80; 5 (limited by the 18,432 dynamic shared bytes, see #1602), 6 by registers | 39-48; 10-12 |
-| warps active / eligible a cycle | 15-16 / 0.35 | 23.6 / 1.44 |
-| issue active | 27% | 50% |
-| L1 hit rate | 86.5% | 87.4% |
+| registers; blocks of 128 per SM | 80; 6 (registers) | 39-48; 10-12 |
+| warps active a cycle | 21.6 | 23.6 |
+| sectors a load request | 16.45 | 8.5 |
 
-Both read the same bytes from the same caches; Bend waits longer for them. In the K loop's SASS, 69% of the stall samples
-sit on the first multiply after the 8 loads, and the step carries, besides the 8 loads and 32 float operations:
+The step carries, besides the 8 loads and 32 float operations:
 
-- the error poll (`YIELD`, `BSSY`/`BSYNC`, a counter and a branch every step; the separate issue);
+- the error poll (`YIELD`, `BSSY`/`BSYNC`, a counter and a branch every step; #1776);
 - ~30 address instructions: every `Array.get` masks its index (`i & (2^cls - 1)`) and the mask is rebuilt from the
   block's class bits each step (`blk_at` reads `blk_cls(a)` of an array that is a loop variable), so the compiler cannot
   turn `base + i` into a pointer plus a fixed offset;
 - a 64-bit counter for the `Nat` fuel.
 
 And the whole runtime is one kernel, so the matmul's loop runs with the register count of the largest path in it (80),
-which caps the resident lanes.
+which caps the resident lanes at 6 blocks per SM.
 
-What I could reproduce: adding the index mask, the poll and Bend's occupancy to the handwritten kernel makes it 1.25-1.35x
-slower (1.45-1.7 ms). The rest is coalescing. Bend's loads cost 16.45 sectors a request against 8.5 handwritten, and
-40.5 M sectors come from L2 against 5.7 M: the warps do not hold the leaves the layout assumes. Each block of 128
-threads runs one aligned range of 128 leaves, but inside the block the leaves are dealt to threads in an order that
-changes from run to run (`gpu-leaf-order.md`, a separate issue). Renumbering the leaves to fit the order I observed most
-often (a permutation of the low 7 bits) brings the matmul to 9.39 sectors a request, 12.7 M from L2, and 3.16 ms a
-product (from 4.3, the same results). Adding the poll's removal on top gives the account (Nsight Systems, the main pass):
+The largest single part is coalescing: Bend's loads cost 16.45 sectors a request against the twin's 8.5, because the
+warps do not hold the leaves the layout assumes. Each block of 128 threads runs one aligned range of 128 leaves, but
+inside the block the leaves are dealt in an order that changes from run to run (a separate issue). Renumbering the
+leaves to fit the order I observed (a permutation of the low 7 bits) brings the loads to 9.59 sectors a request, with
+the same instructions:
 
-| main pass, 512² 4x4n | ms |
+| 512², 4x4, ms a product | |
 |---|---:|
-| as built | 4.50 |
-| leaves renumbered | 3.23 |
-| renumbered, poll split (the other issue's patch) | 2.63 |
-| renumbered, no poll | 1.81 |
-| handwritten with Bend's index mask, poll and occupancy | 1.45-1.7 |
-| handwritten | 1.04 |
+| as built | 4.62-4.72 |
+| leaves renumbered | 2.82-2.96 |
+| renumbered, poll split (#1776's patch) | 3.14-3.30 |
+| renumbered, poll removed | 2.16-2.22 |
+| handwritten | 1.08-1.23 |
 
-Copying the rest into the handwritten kernel closes it: Bend's addressing (both masks rebuilt every step from the
-array term's class bits, a 64-bit counter) costs nothing measurable there, and running on each thread the leaf Bend ran
-there in a measured run (renumbered the same way) gives 1.56-1.65 ms, against Bend's 1.69-1.84 ms, within the run-to-run
-spread (busy CPU). Ruled out: the leaf count (4,096 to 16,384 leaves give the same ratio), unrolling
-(the handwritten kernel without unrolling is not slower), managed memory (the handwritten kernel in one managed heap
-runs as fast) and the data layout (the same in both).
+The last Bend row minus the ~0.7 ms a bang costs (~1.5 ms) is where the handwritten kernel lands once it copies Bend's
+index mask, poll and occupancy: 1.36-1.47 ms at 6 blocks per SM (2026-10-18, busy CPU; the mask alone +20%). Copying
+Bend's addressing further (both masks rebuilt every step, a 64-bit counter) costs the twin nothing measurable. Ruled out:
+the leaf count (4,096 to 16,384 leaves give the same ratio), unrolling (the twin without unrolling is not slower), managed
+memory (the twin in one managed heap runs as fast) and the data layout (the same in both).
+
+One thing I did not expect: with the leaves renumbered, #1776's split poll is slower than the plain poll (3.14-3.30
+against 2.82-2.96 ms), while on the matmul as built it is faster (222-227 against 230-237 ms for 50 products). I have not
+looked at why.
 
 ## Questions
 
