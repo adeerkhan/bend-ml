@@ -1,6 +1,7 @@
 # Draft issue for bendlang/bend: a `$CC` that cannot run is skipped without a word
 
-Status: draft (2026-10-20), not posted. Checked for duplicates on 2026-10-20 (searched "CC environment", "cc_find",
+Status: posted as https://github.com/bendlang/bend/issues/1802 (2026-10-20, by Claude Code with Renan's go-ahead), in the Bug
+form's fields, with the three cases below run on a one-line program (all exit 0, silent, built by clang). Checked for duplicates on 2026-10-20 (searched "CC environment", "cc_find",
 "compiler flags", "cflags", "clang flags", "march", "native target"): none for this bug. The closest is PR #1461 (read
 `$CFLAGS` for `bend -o`, closed 2026-10-14): the maintainers want to keep the build CLI small and point to `bend f.bend
 -o f.c` plus clang by hand for custom flags. This draft does not ask for flags again; it asks only that a `$CC` the user
@@ -26,7 +27,7 @@ CC="clang -mavx2" bend prog.bend -o prog    # exit 0, no output
 objdump -d prog | grep -c ymm               # 0: built by plain clang
 ```
 
-By the same code (I read it, did not run these two), the same happens for a typo in a path (`CC=/usr/bin/clang-1` builds with `clang`) or a `$CC` that is gcc (it is skipped
+The same happens (run on 2026-10-20 before posting) for a typo in a path (`CC=/usr/bin/clang-1` builds with `clang`) or a `$CC` that is gcc (it is skipped
 as "not clang", but only an error that lists every candidate says so, and there is none when a later one works).
 
 ## Expected
