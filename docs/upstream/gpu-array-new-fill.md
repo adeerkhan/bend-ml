@@ -1,6 +1,6 @@
 # Draft issue for bendlang/bend: on CUDA, `Array.new` inside a bang fills its block on one lane
 
-Status: draft (2026-10-18), not posted; Renan posts it. Checked on 2026-10-18 (searched "Array.new GPU", "Array.new
+Status: posted as https://github.com/bendlang/bend/issues/1778 (2026-10-19, by Claude Code with Renan's go-ahead), in the Bug form's fields. Checked on 2026-10-18 (searched "Array.new GPU", "Array.new
 fill", "blk_new"): none open; #1267 is about `Array.new` of boxed values at depth 24, not this. Bend 2.0.37, RTX 4050
 Laptop, driver 615.78.08, NVRTC 12.9. Rechecked on main 881cb2e5 (2026-10-19): `blk_new` is the same loop, and the
 sweep gives the same ~4.6 ns a cell. Repro: `gpu_array_new_fill.bend` (next to this file).
