@@ -4,6 +4,14 @@ Status: draft (2026-10-17), not posted, and not to be posted as a speed issue: t
 the native target gains little and fusion loses (below). Checked for duplicates on 2026-10-18 (searched "FMA", "fused
 multiply", "fp-contract", "march", "f32_rewrap"): none. Reproduced on Bend 2.0.37, clang 22.1.8, Core Ultra 7 155H.
 
+Update 2026-10-20 (idle machine, bend2-lab `experiments/2026-10-20-block-b/`): on today's BendTorch code the native
+target gains much more than below: one SmolLM2-135M `train 3`, 3 alternated rounds, clang 23.1.3, `-march=native`
+-12.5% on 1 thread (41.50 -> 36.33 s) and -6.8% on 16 (15.07 -> 14.05 s), `-mavx2` -9.7% and -3.4%, both well above the
+loop-alignment noise (`-falign-loops=64` alone: -2.2% and -1.3%), same bits, still no FMA. The flags question is closed
+upstream: PR #1461 (`$CFLAGS` for `bend -o`) was declined on 2026-10-14 (keep the build CLI small; `-o f.c` and clang by
+hand). What remains is a small bug, drafted in `cc-silent-fallback.md`. This draft stays unposted; the code-generation
+fact below is still true.
+
 Timing (idle machine, the same emitted C built three ways; one SmolLM2-135M AdamW step in pure Bend, 1 thread pinned to a
 P-core and 16 threads, 3 alternated rounds; each build gives the same bits on 1 and 16 threads):
 
