@@ -1,6 +1,6 @@
 # Draft issue for bendlang/bend: where a tiled matmul's time goes on CUDA, against the same kernel handwritten
 
-Status: draft (2026-10-18), not posted; Renan decides whether and when to post it. Rewritten on 2026-10-19 against main
+Status: posted as https://github.com/bendlang/bend/issues/1781 (2026-10-19, by Claude Code with Renan's go-ahead), in the Feature form's fields. Rewritten on 2026-10-19 against main
 881cb2e5, which has PR #1602 (no dynamic shared memory at launch): every time below is from that day's idle round
 (bend2-lab `experiments/2026-10-19-leaves-mm-idle/`), the counters from Nsight Compute on main, and the handwritten-twin
 breakdown from 2026-10-18 (busy CPU, idle GPU), as marked. The text below the line is the current one; the older numbers
