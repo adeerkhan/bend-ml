@@ -1,6 +1,6 @@
 # Draft issue for bendlang/bend: on CUDA, a balanced tree's leaves are dealt to threads in a run-time order
 
-Status: draft (2026-10-18), not posted; Renan posts it. Rerun on main 881cb2e5 (with #1602) on 2026-10-19: the map
+Status: posted as https://github.com/bendlang/bend/issues/1780 (2026-10-19, by Claude Code with Renan's go-ahead), in the Feature form's fields. Rerun on main 881cb2e5 (with #1602) on 2026-10-19: the map
 three more times, the layouts and the matmul on an idle machine (bend2-lab `experiments/2026-10-19-leaves-mm-idle/`). Checked for duplicates on 2026-10-18 (searched "lane order",
 "thread index", "leaf order", "coalesce", "lane index"): none. Bend 2.0.37, RTX 4050 Laptop, drivers 610.57.04 and
 615.78.08 (the map below on 615.78.08). Pairs with `gpu-matmul-gap.md` and `gpu-error-poll.md`.
