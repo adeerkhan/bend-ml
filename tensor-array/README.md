@@ -8,7 +8,7 @@ Tensors in Bend 2 over a flat `Array<F32>`, **with the shape in the type**: the 
 
 ```python
 import Base
-import bend-ml-tensor-array@0.1.12.0/main.bend as TA
+import bend-ml-tensor-array@0.1.14.0/main.bend as TA
 
 def prod(a: TA.Mat<100n, 784n>, w: TA.Mat<784n, 128n>) -> TA.MMul<100n, 784n, 128n>:
   TA.Mat.matmul(100n, 784n, 128n, 3n, a, w)   # 3n = 2^3 = 8 parallel blocks
@@ -118,6 +118,18 @@ With parallel blocks, the large MNIST product (100×784·784×128) gains ~2x on 
 
 ## Versions
 
+- `0.1.14.0`: `Mat.matmul_precise`, opt-in: `Mat.matmul` with k summed in blocks of 1024 (each block's dot with the
+  usual four partial sums, the block totals added in order), for long dots. SmolLM2's head product (k = 49,152) as four
+  running sums of 12,288 terms lost the small ones: BendTorch's gradients were 1.8x further from float64 than PyTorch's
+  float32, 0.03x with this product. It copies each block's slices of A and B and runs one product a block; at the head's
+  shape (256 x 49,152 x 576, 16 threads) that was faster than `Mat.matmul` (0.38 against 0.52 s with tensor-fork's
+  products), the blocks fitting the cache. Up to 1024 steps it is `Mat.matmul`'s bits; every other function unchanged
+  (`tests/blocks.bend`: the cells against dotr's blocks, built independently).
+- `0.1.13.0`: `cap_depth` compares with Base's `Nat.is_le`, one native comparison in the compiled
+  program, instead of `leb`, which walked its arguments one step at a time: n steps in all for a capacity of n cells.
+  On the host that was little (under 0.4 ms a call); inside a bang it runs on one GPU lane, where `cap_depth(786432)`
+  took ~128 ms against ~4.5 ms now (a bang that only computes it, 20 calls, RTX 4050 Laptop). A lemma proves
+  `Nat.is_le` equal to `leb`, so the law `cap_ok` is the same statement; the same capacities (`tests/cap.bend`).
 - `0.1.12.0`: a product with one row runs the scalar loop at every `par`. Up to 0.1.11.0 it split by columns and
   cloned both operands at every node: one row against a 50,257 x 768 matrix at `par` 4 peaked at 9.5 GB (now 565 MB)
   or ran out of the default heap, and 8192 x 2048 took 124 ms on 16 threads (now 9.9). The same bits

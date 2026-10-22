@@ -42,7 +42,9 @@ NOTES exp. 10).
    recorded in `NOTES.md` as debt and left out of the README. Two packages stand outside the proofs, by Renan's
    decision, and no package with laws imports them: `binary-read` (foreign code, one def) and `tensor-fork` (Base's
    `@unsafe` `Array.fork`, all Bend; decided 2026-10-16). `make check` pins the list of defs each one has outside the
-   proofs, so it cannot grow unnoticed. A new exception is Renan's call.
+   proofs, so it cannot grow unnoticed. A third, approved by Renan on 2026-10-18: `tensor-gpu`
+   (tensor-array's products under `!`, Base's `@unsafe` `Array.fork`/`Array.join`, all Bend), on the same terms: no
+   package with laws imports it, `make check` pins its defs outside the proofs, and it gives tensor-array's bits. A new exception is Renan's call.
 4. Prove structure (shapes, sizes, composition); test numbers. `F32` is not a real number, so numerics
    are validated against PyTorch / NumPy / tiktoken by the scripts in `reference/`.
 5. Every proved law appears in its package README in plain language, and in `reference/list_laws.py`.
@@ -72,6 +74,14 @@ NOTES exp. 10).
   loops with an accumulator). Check scaling with `--threads 1` against `--threads 16`, and read the emitted
   C (`bend X.bend -o x.c`) when it does not scale. (Up to 2.0.36 a parallel let silently became sequential
   when the def's last parameter was erased, NOTES exp. 11; fixed in 2.0.37 by bendlang/bend#1377.)
+- On the GPU a lane has a 2,048-word stack: a non-tail recursion inside a `!` faults past it ("memory fault (machine
+  stack overflow?)", e.g. `List.append` over 1,023 elements) while `--gpu off` runs; use tail loops in bangs (bendlang/bend
+  #1393). Every device loop also polls for errors, which costs 4-20x on loops with little work a step (a draft issue
+  in bend-ml's `docs/upstream/gpu-error-poll.md`); loops that read memory pay 1.2-1.9x.
+- On CUDA a bang deals a balanced tree's leaves to threads in a run-time order: each block of 128 threads gets one
+  aligned range of 128 leaves, but inside it the order changes from run to run, so "leaf k on lane k" layouts read
+  uncoalesced (16 sectors a warp instead of 4). Check layouts with `ncu` (sectors per request); a
+  renumbering of the low 7 bits helps a 2^14 tree (issue draft `docs/upstream/gpu-leaf-order.md`).
 - `IO.fork` gives concurrency, not parallelism: forked computations take turns on one event loop
   (NOTES exp. 12). This is intended; the guide says so since bendlang/bend#1415. Use parallel lets in pure
   code for several cores.
@@ -83,6 +93,15 @@ NOTES exp. 10).
   Indexes wrap around, so never write past a capacity. Corrected 2026-10-13 (NOTES).
 - An `import ... as M` does not re-export. A BendHub package can hold several files (users import each one as
   `pkg@ver/file.bend`; NOTES 2026-10-10, lead 5), but then every caller must import every file it uses.
+  `--publish` sends the entry file and everything it imports (store packages stay out), so a file nothing imports
+  needs an entry that imports it; the entry may have any name. Relative imports inside a published package
+  (`./x.bend`, `../d/x.bend`) resolve; a hub file may import only hub files. Paths: segments `[A-Za-z_][A-Za-z0-9_-]*`
+  (no dots); names `[a-z][a-z0-9-]{0,63}@a.b.c.d` (checked in Bend 2.0.37's source and against a published
+  multi-file package, 2026-10-19).
+- A template (`~l`) is substituted at each use, so a record of functions passed as one is built again wherever it is
+  used, and its plain-value fields are computed then. A composite whose value field reads its children
+  (`count: count(a) + count(b)`) builds their whole records at every use and drops them: +5% instructions in a
+  two-layer model (2026-10-17). Make such fields closures (`count: Unit -> U32`).
 
 ## Agent skills
 

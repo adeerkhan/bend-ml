@@ -1,6 +1,6 @@
 # bend-ml-tensor-array: tensors over a flat Array<F32>, with the shape in the type.
 #
-#   import bend-ml-tensor-array@0.1.12.0/main.bend as TA
+#   import bend-ml-tensor-array@0.1.14.0/main.bend as TA
 #
 # Mat<r, c> stores r*c numbers in an Array<F32>, row by row (index i*c + j). The
 # dimensions are erased type parameters: the same guarantee as bend-ml-tensor
@@ -482,10 +482,28 @@ def snd_nat(r: Nat & Nat) -> Nat:
     case Tuple{d, p}:
       p
 
+# leb is Base's Nat.is_le, case for case. leb walks its arguments one step at a time in the compiled program; Base's
+# comparison is one native comparison there (0.1.13.0).
+def le_leb(a: Nat, b: Nat) -> {Nat.is_le(a, b) == leb(a, b) : Bool}:
+  match a b:
+    case 0n 0n:
+      {==}
+    case 0n 1n+q:
+      {==}
+    case 1n+p 0n:
+      {==}
+    case 1n+p 1n+q:
+      le_leb(p, q)
+
+def leb_of(+a: Nat, +b: Nat, e: {True{} == Nat.is_le(a, b) : Bool}) -> {True{} == leb(a, b) : Bool}:
+  %le_leb(a, b) : {True{} == _ : Bool}
+  e
+
 # the same pair by doubling (0.1.10.0): p doubles until n <= p, log2(n) steps in a tail loop, where cap_pair takes n
 # steps of a recursion that is not a tail call, each with a comparison of up to n steps. Its fuel is n, which always
 # suffices (2^n >= n); if it ran out, the answer would be cap_pair's, so the law below needs no arithmetic about how
-# many doublings there are. ok is leb(n, p), computed by the caller (match only inspects a parameter).
+# many doublings there are. ok is Nat.is_le(n, p), computed by the caller (match only inspects a parameter); with leb
+# it was n steps in all, 152 ms for n = 786,432 on one GPU lane (0.1.13.0).
 def cap_dbl(f: Nat, ok: Bool, +n: Nat, +d: Nat, +p: Nat) -> Nat & Nat:
   match f ok:
     case _ True{}:
@@ -493,11 +511,11 @@ def cap_dbl(f: Nat, ok: Bool, +n: Nat, +d: Nat, +p: Nat) -> Nat & Nat:
     case 0n False{}:
       cap_pair(n)
     case 1n+g False{}:
-      cap_dbl(g, leb(n, Nat.add(p, p)), n, 1n+d, Nat.add(p, p))
+      cap_dbl(g, Nat.is_le(n, Nat.add(p, p)), n, 1n+d, Nat.add(p, p))
 
 # the depth d such that an Array with 2^d slots holds n elements (the smallest such d)
 def cap_depth(+n: Nat) -> Nat:
-  fst_nat(cap_dbl(n, leb(n, 1n), n, 0n, 1n))
+  fst_nat(cap_dbl(n, Nat.is_le(n, 1n), n, 0n, 1n))
 
 # ---- lemmas ----
 
@@ -590,16 +608,16 @@ def cap_inv(n: Nat) -> {snd_nat(cap_pair(n)) == pow2(fst_nat(cap_pair(n))) : Nat
 
 # the invariant of cap_dbl: whichever way it ends (n <= p found, or the fuel out and cap_pair's answer), the second
 # component is 2^(first) and is >= n
-def dbl_inv(f: Nat, ok: Bool, +n: Nat, +d: Nat, +p: Nat, e: {ok == leb(n, p) : Bool}, i1: {p == pow2(d) : Nat}) -> {snd_nat(cap_dbl(f, ok, n, d, p)) == pow2(fst_nat(cap_dbl(f, ok, n, d, p))) : Nat} & {True{} == leb(n, snd_nat(cap_dbl(f, ok, n, d, p))) : Bool}:
+def dbl_inv(f: Nat, ok: Bool, +n: Nat, +d: Nat, +p: Nat, e: {ok == Nat.is_le(n, p) : Bool}, i1: {p == pow2(d) : Nat}) -> {snd_nat(cap_dbl(f, ok, n, d, p)) == pow2(fst_nat(cap_dbl(f, ok, n, d, p))) : Nat} & {True{} == leb(n, snd_nat(cap_dbl(f, ok, n, d, p))) : Bool}:
   match f ok:
     case _ True{}:
-      (i1, e)
+      (i1, leb_of(n, p, e))
     case 0n False{}:
       cap_inv(n)
     case 1n+g False{}:
-      dbl_inv(g, leb(n, Nat.add(p, p)), n, 1n+d, Nat.add(p, p), {==}, step_eq(d, p, i1))
+      dbl_inv(g, Nat.is_le(n, Nat.add(p, p)), n, 1n+d, Nat.add(p, p), {==}, step_eq(d, p, i1))
 
-def dbl_final(n: Nat, pr: {snd_nat(cap_dbl(n, leb(n, 1n), n, 0n, 1n)) == pow2(fst_nat(cap_dbl(n, leb(n, 1n), n, 0n, 1n))) : Nat} & {True{} == leb(n, snd_nat(cap_dbl(n, leb(n, 1n), n, 0n, 1n))) : Bool}) -> {True{} == leb(n, pow2(cap_depth(n))) : Bool}:
+def dbl_final(n: Nat, pr: {snd_nat(cap_dbl(n, Nat.is_le(n, 1n), n, 0n, 1n)) == pow2(fst_nat(cap_dbl(n, Nat.is_le(n, 1n), n, 0n, 1n))) : Nat} & {True{} == leb(n, snd_nat(cap_dbl(n, Nat.is_le(n, 1n), n, 0n, 1n))) : Bool}) -> {True{} == leb(n, pow2(cap_depth(n))) : Bool}:
   match pr:
     case Tuple{i1, i2}:
       %i1 : {True{} == leb(n, _) : Bool}
@@ -611,7 +629,7 @@ law cap_ok:
   {True{} == leb(n, pow2(cap_depth(n))) : Bool}
 
 def cap_ok(n):
-  dbl_final(n, dbl_inv(n, leb(n, 1n), n, 0n, 1n, {==}, {==}))
+  dbl_final(n, dbl_inv(n, Nat.is_le(n, 1n), n, 0n, 1n, {==}, {==}))
 
 # r x c of zeros, with the exact capacity (smallest power of 2)
 
@@ -1111,6 +1129,63 @@ def Mat.matmul_tn_acc(+n: Nat, +k: Nat, +m: Nat, par: Nat, a: Mat<k, n>, b: Mat<
   match a b c:
     case Mat{x} Mat{y} Mat{z}:
       mmul_tn_fin(n, k, m, gemm_any(True{}, split_depth(par, n, m, k), n, m, k, 1, U32.from_nat(n), U32.from_nat(m), 1, x, y, z))
+
+# ---- a precise product for long dots (0.1.14.0) ----
+#
+# Mat.matmul_precise is Mat.matmul with k summed in blocks of 1024 (the last one 1..1024): block b's columns of A and
+# rows of B are copied out, the first block's product written into C, each next one's added to it as matmul_acc adds,
+# so every cell is ((x0 + x1) + x2) .., x_b the block's dot with the usual four partial sums. A dot of 49,152 products
+# as four running sums of 12,288 lost the small terms (SmolLM2's head: its gradient 1.8x further from float64 than
+# PyTorch's float32, 0.03x in blocks; BendTorch NOTES, 2026-10-18). Opt-in: it copies the slices and runs one product
+# a block, and the default products keep their speed and bits. Up to 1024 steps it is Mat.matmul itself.
+
+type SL is Type:
+  SL{a: Array<F32>, s: Array<F32>}
+
+# d[di..] = src[si..], k numbers; r holds src[si], already read
+def sl_row(k: Nat, +si: U32, +di: U32, d: Array<F32>, r: Array<F32> & F32) -> SL:
+  match k r:
+    case 0n Tuple{a, x}: SL{a, d}
+    case 1n+p Tuple{a, +x}: sl_row(p, (si + 1 : U32), (di + 1 : U32), Array.set(F32, d, di, x), Array.get(F32, a, (si + 1 : U32)))
+
+# rows i.. of a slice: w numbers a row from src[i*st + o], into d[i*w]
+def sl_rows(r: Nat, +i: U32, +w: Nat, +w32: U32, +st: U32, +o: U32, sl: SL) -> SL:
+  match r sl:
+    case 0n sl: sl
+    case 1n+p SL{a, d}: sl_rows(p, (i + 1 : U32), w, w32, st, o, sl_row(w, ((i * st : U32) + o : U32), (i * w32 : U32), d, Array.get(F32, a, ((i * st : U32) + o : U32))))
+
+def blk_len(+bi: U32, +k: U32) -> Nat:
+  U32.to_nat(Bool.pick(U32, U32.is_lt((k - (bi * 1024 : U32) : U32), 1024), (k - (bi * 1024 : U32) : U32), 1024))
+
+def mp_s4(a: Array<F32>, b: Array<F32>, g: G) -> G:
+  match g:
+    case G{x, y, c}: G{a, b, c}
+
+def mp_s3(+ac: Bool, +par: Nat, +n: Nat, +m: Nat, +w: Nat, +w32: U32, +m32: U32, a: Array<F32>, as: Array<F32>, c: Array<F32>, sb: SL) -> G:
+  match sb:
+    case SL{b, bs}: mp_s4(a, b, gemm_any(ac, split_depth(par, n, m, w), n, m, w, w32, 1, m32, 1, as, bs, c))
+
+def mp_s2(+ac: Bool, +par: Nat, +n: Nat, +m: Nat, +w: Nat, +w32: U32, +m32: U32, +o: U32, c: Array<F32>, b: Array<F32>, sa: SL) -> G:
+  match sa:
+    case SL{a, as}: mp_s3(ac, par, n, m, w, w32, m32, a, as, c, sl_row(Nat.mul(w, m), (o * m32 : U32), 0, Array.new(F32, cap_depth(Nat.mul(w, m)), 0.0), Array.get(F32, b, (o * m32 : U32))))
+
+# block bi: A's columns o..o+w (A is n x k) and B's rows o..o+w (B is k x m), multiplied into C (added when ac)
+def mp_step(+ac: Bool, +par: Nat, +n: Nat, +m: Nat, +k32: U32, +bi: U32, a: Array<F32>, b: Array<F32>, c: Array<F32>) -> G:
+  mp_s2(ac, par, n, m, blk_len(bi, k32), U32.from_nat(blk_len(bi, k32)), U32.from_nat(m), (bi * 1024 : U32), c, b, sl_rows(n, 0, blk_len(bi, k32), U32.from_nat(blk_len(bi, k32)), k32, (bi * 1024 : U32), SL{a, Array.new(F32, cap_depth(Nat.mul(n, blk_len(bi, k32))), 0.0)}))
+
+def mp_go(nb: Nat, +bi: U32, +par: Nat, +n: Nat, +m: Nat, +k32: U32, g: G) -> G:
+  match nb g:
+    case 0n g: g
+    case 1n++q G{a, b, c}: mp_go(q, (bi + 1 : U32), par, n, m, k32, mp_step(U32.is_lt(0, bi), par, n, m, k32, bi, a, b, c))
+
+def mm_precise2(long: Bool, +n: Nat, +k: Nat, +m: Nat, par: Nat, a: Mat<n, k>, b: Mat<k, m>) -> MMul<n, k, m>:
+  match long a b:
+    case True{} Mat{x} Mat{y}: mmul_fin(n, k, m, mp_go(U32.to_nat(U32.div((U32.from_nat(k) + 1023 : U32), 1024)), 0, par, n, m, U32.from_nat(k), G{x, y, Array.new(F32, cap_depth(Nat.mul(n, m)), 0.0)}))
+    case False{} a b: Mat.matmul(n, k, m, par, a, b)
+
+# C = A · B (n x k) · (k x m), k summed in blocks of 1024 (above); opt-in
+def Mat.matmul_precise(+n: Nat, +k: Nat, +m: Nat, +par: Nat, a: Mat<n, k>, b: Mat<k, m>) -> MMul<n, k, m>:
+  mm_precise2(Nat.is_lt(1024n, k), n, k, m, par, a, b)
 
 # ---- element-wise and training operations ----
 

@@ -13,7 +13,7 @@
 product of mismatched matrices does not compile, and the structural guarantees (a tokenizer that never loses a byte, a
 reverse mode that agrees with the forward mode, a parallel product that covers every row) are laws that Bend's kernel
 checks. Six packages are on BendHub, and two demos run on them: an MNIST classifier that trains, and GPT-2 small, which
-generates the same tokens as PyTorch. The current release is [v1.3.2](https://github.com/nuxyel/bend-ml/releases/tag/v1.3.2).
+generates the same tokens as PyTorch. The current release is [v1.5.0](https://github.com/nuxyel/bend-ml/releases/tag/v1.5.0).
 
 ## 01 · A shape error is a type error
 
@@ -36,14 +36,15 @@ only compiles with a proof that the number of elements does not change, even whe
 |---|---|---|---|
 | [`bend-ml-nat-lemmas`](nat-lemmas) | 0.1.1.0 | `Nat` and `List` lemmas that Base does not have | `add_comm`, `add_assoc`, `mul_comm`, `mul_assoc`, `mul_dist`, `append_assoc`, `length_append`, `product_append`... (15) |
 | [`bend-ml-bpe-tokenizer`](bpe) | 0.1.3.0 | Byte-level BPE tokenizer (GPT-2 style) | **roundtrip** `decode(encode(s)) = s`, `vocab_bound`, `dec_append`, `train_wf`, `roundtrip_trained` |
-| [`bend-ml-tensor`](tensor) | 0.1.2.0 | `Vec<n>` and `Mat<r,c>` with the shape in the type, over lists | `reshape_swap`, `reshape_flat` |
-| [`bend-ml-tensor-array`](tensor-array) | 0.1.12.0 | the same guarantees over a flat `Array<F32>`; `Bands<r,c>` for a parallel matrix · vector | `cap_ok`, `half_cover`, `leaf_len`, `band_len`; typed `matmul`, `matmul_nt`, `matmul_tn` (and their accumulating forms), `Bands.matvec` |
-| [`bend-ml-autograd`](autograd) | 0.1.1.0 | Automatic differentiation and layers with typed backward | **`reverse_eq_forward`** |
+| [`bend-ml-tensor`](tensor) | 0.1.2.0 | `Vec<n>` and `Mat<r,c>` with the shape in the type, over lists. **Frozen** (2026-10-19): no new versions; superseded by tensor-array | `reshape_swap`, `reshape_flat` |
+| [`bend-ml-tensor-array`](tensor-array) | 0.1.14.0 | the same guarantees over a flat `Array<F32>`; `Bands<r,c>` for a parallel matrix · vector | `cap_ok`, `half_cover`, `leaf_len`, `band_len`; typed `matmul`, `matmul_nt`, `matmul_tn` (and their accumulating forms), `Bands.matvec` |
+| [`bend-ml-autograd`](autograd) | 0.1.1.0 | Automatic differentiation and layers with typed backward. **Frozen** (2026-10-19): no new versions; training moves to [BendTorch](https://github.com/nuxyel/bendtorch) | **`reverse_eq_forward`** |
 | [`bend-ml-binary-read`](binary-read) | 0.1.0.0 | F32 weights read from a file straight into an `Array<F32>`; foreign code (C and JavaScript), kept out of the packages with laws | none: an effect, tested on both lanes |
-| [`bend-ml-tensor-fork`](tensor-fork) | 0.1.1.0 | tensor-array's six products with the parallel blocks sharing A, B and C (`Array.fork`, `@unsafe` in Base) instead of copying them: an MNIST epoch 12.0 → 6.2 s on one thread, 4.4 → 3.0 s on 16; `par1`..`par4`, any kernel over blocks of shared arrays | none: the same bits as tensor-array, tested on 14,835 products; kept out of the packages with laws |
+| [`bend-ml-tensor-fork`](tensor-fork) | 0.1.2.0 | tensor-array's six products with the parallel blocks sharing A, B and C (`Array.fork`, `@unsafe` in Base) instead of copying them: an MNIST epoch 12.0 → 6.2 s on one thread, 4.4 → 3.0 s on 16; `par1`..`par4`, any kernel over blocks of shared arrays | none: the same bits as tensor-array, tested on 14,835 products; kept out of the packages with laws |
+| [`bend-ml-tensor-gpu`](tensor-gpu) | 0.1.2.1 | tensor-array's six products as one `!` call each, so they run on the GPU (`Array.fork`, `@unsafe` in Base); at SmolLM2-135M's sizes 1.6-2.8x faster than tensor-fork on 16 threads, 512 x 4096 x 512 4.5x; `run1`..`run4`, bangs over any leaf code written in plain Bend | none: the same bits as tensor-array on the GPU and the CPU, tested on 2,967 products; kept out of the packages with laws |
 
 ```python
-import bend-ml-tensor-array@0.1.12.0/main.bend as TA
+import bend-ml-tensor-array@0.1.14.0/main.bend as TA
 import bend-ml-bpe-tokenizer@0.1.3.0/main.bend as BPE
 ```
 
@@ -114,8 +115,8 @@ Linux x86_64 (or WSL), clang ≥ 14, Python ≥ 3.12, `curl`, ~3 GB of disk, 8 G
 ```bash
 git clone https://github.com/nuxyel/bend-ml.git && cd bend-ml
 make setup          # Bend 2.0.37 (SHA256-checked), Lean 4.34.0, Python venv, data; no sudo
-make check          # 53 checks, about 2.5 min
-make check-full     # 61 checks with GPT-2 and MNIST, about 5 min
+make check          # 82 checks
+make check-full     # the same plus GPT-2 and MNIST
 make media          # regenerate the figures on this page (needs node, ffmpeg, Brave)
 ```
 

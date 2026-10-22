@@ -65,9 +65,7 @@ def main():
 
     # 1c. tensor-fork: the one package whose parallel blocks share arrays through Base's @unsafe Array.fork; its unsafe
     # defs are exactly the blocks, the fork tree and what reaches them, no package with laws imports it, and it gives tensor-array's bits
-    fork_defs = ["blocks1", "join2", "blocks2", "join3", "blocks3", "join4", "blocks4", "par1", "par2", "par3", "par4", "pk_par",
-                 "rpar", "cpar", "t8_tree", "t8_go", "gemm_fork", "gemm_rows", "gemm_any2", "gemm_any", "matmul", "matmul_acc",
-                 "matmul_nt", "matmul_nt_acc", "matmul_tn", "matmul_tn_acc"]
+    fork_defs = ["blocks1", "join2", "blocks2", "join3", "blocks3", "join4", "blocks4", "par1", "par2", "par3", "par4", "pk_par", "rpar", "cpar", "t8_tree", "t8_go", "gemm_fork", "gemm_rows", "gemm_any2", "gemm_any", "matmul", "matmul_acc", "matmul_nt", "matmul_nt_acc", "matmul_tn", "matmul_tn_acc", "mp_s3", "mp_s2", "mp_step", "mp_go", "mm_precise2", "matmul_precise"]
     run("tensor-fork/main.bend: its @unsafe defs are the fork tree and what reaches it", [BEND, "tensor-fork/main.bend"],
         lambda o, c: f"{len(fork_defs)} defs rely on unsafe or foreign code" in o and re.findall(r"^- (\S+)$", o, re.M) == fork_defs)
     clean = not any("tensor-fork" in open(os.path.join(ROOT, f)).read() for f in laws)
@@ -79,9 +77,57 @@ def main():
         for t in ["1", "16"]:
             run(f"tensor-fork gives tensor-array's bits, A and B intact: 14,832 products, the six public ones, three big ones, par1..par4 ({t} threads)",
                 [tf, "--threads", t], lambda o, c: o.split() == ["0", "0", "14832"] + ["0"] * 13)
+        tfp = os.path.join(d, "tfp")
+        run("compile tensor-fork/tests/precise.bend", [BEND, "tensor-fork/tests/precise.bend", "-o", tfp])
+        for t in ["1", "16"]:
+            run(f"tensor-fork's matmul_precise gives tensor-array's bits: 21 products ({t} threads)", [tfp, "--threads", t],
+                lambda o, c: o.strip() == '"0 21"')
     if FULL:
         run("tensor-fork/tests/bits.bend on the JS lane", [BEND, "tensor-fork/tests/bits.bend"],
             lambda o, c: re.findall(r"^[0-9 ]+$", o, re.M) == ["0 0 14832", "0 0 0 0 0 0", "0 0 0 0 0 0 0"])
+
+    # 1d. tensor-gpu: tensor-array's products as one bang each (Base's @unsafe Array.fork/join, upstream's one-block
+    # pattern; Renan's decision, 2026-10-18); its unsafe defs are the tree, its leaves and what reaches them, no package
+    # with laws imports it, and it gives tensor-array's bits on the CPU threads and, when CUDA is there, on the GPU
+    gpu_defs = ["mm", "put", "tile", "leaf_if", "leaf", "tree", "tree_new", "bang_new", "bang", "run_e", "gemm_new", "gemm", "matmul", "matmul_acc", "matmul_nt", "matmul_nt_acc", "matmul_tn", "matmul_tn_acc", "join2", "join3", "join4", "tree1", "root1", "root1_new", "go1", "go1_new", "run1", "run1_new", "tree2", "root2", "root2_new", "go2", "go2_new", "run2", "run2_new", "tree3", "root3", "root3_new", "go3", "go3_new", "run3", "run3_new", "tree4", "root4", "root4_new", "go4", "go4_new", "run4", "run4_new", "blocks_acc", "precise_c", "mm_precise3", "mm_precise2", "matmul_precise"]
+    run("tensor-gpu/main.bend: its @unsafe defs are the bang's tree and what reaches it", [BEND, "tensor-gpu/main.bend"],
+        lambda o, c: f"{len(gpu_defs)} defs rely on unsafe or foreign code" in o and re.findall(r"^- (\S+)$", o, re.M) == gpu_defs)
+    clean = not any("tensor-gpu" in open(os.path.join(ROOT, f)).read() for f in laws)
+    results.append(clean)
+    print(f"{'ok  ' if clean else 'ERROR'} no package with laws imports tensor-gpu")
+    gpu_want = ["0", "0", "2958"] + ["0"] * 9
+    with tempfile.TemporaryDirectory() as d:
+        tg = os.path.join(d, "tg")
+        run("compile tensor-gpu/tests/bits.bend", [BEND, "tensor-gpu/tests/bits.bend", "-o", tg])
+        for t in ["1", "16"]:
+            run(f"tensor-gpu gives tensor-array's bits, A and B intact: 2,958 products, the six public ones, three big ones ({t} CPU threads)",
+                [tg, "--threads", t], lambda o, c: o.split() == gpu_want)
+        tk = os.path.join(d, "tk")
+        run("compile tensor-gpu/tests/kernels.bend", [BEND, "tensor-gpu/tests/kernels.bend", "-o", tk])
+        for t in ["1", "16"]:
+            run(f"tensor-gpu's run1..run4 and run1_new..run4_new give their leaf's bits, inputs intact: 5 sizes ({t} CPU threads)",
+                [tk, "--threads", t], lambda o, c: o.split() == ["0"] * 10)
+        cuda = os.environ.get("CUDA_HOME") or os.path.expanduser("~/.local/cuda12")
+        if os.path.isdir(cuda):
+            tgg = os.path.join(d, "tgg")
+            env = {"CUDA_HOME": cuda, "LD_LIBRARY_PATH": os.path.join(cuda, "lib")}
+            run("compile tensor-gpu/tests/bits.bend for CUDA", [BEND, "tensor-gpu/tests/bits.bend", "-o", tgg], extra_env=env)
+            run("tensor-gpu gives tensor-array's bits on the GPU", [tgg], lambda o, c: o.split() == gpu_want, extra_env=env)
+            tkg = os.path.join(d, "tkg")
+            run("compile tensor-gpu/tests/kernels.bend for CUDA", [BEND, "tensor-gpu/tests/kernels.bend", "-o", tkg], extra_env=env)
+            run("tensor-gpu's run1..run4 and run1_new..run4_new give their leaf's bits on the GPU, inputs intact", [tkg],
+                lambda o, c: o.split() == ["0"] * 10, extra_env=env)
+            tgp = os.path.join(d, "tgp")
+            run("compile tensor-gpu/tests/precise.bend for CUDA", [BEND, "tensor-gpu/tests/precise.bend", "-o", tgp], extra_env=env)
+            run("tensor-gpu's matmul_precise gives tensor-array's bits on the GPU: 21 products", [tgp],
+                lambda o, c: o.strip() == '"0 21"', extra_env=env)
+            run("tensor-gpu's matmul_precise gives tensor-array's bits on the CPU threads: 21 products", [tgp, "--gpu", "off", "--threads", "16"],
+                lambda o, c: o.strip() == '"0 21"', extra_env=env)
+        else:
+            print("skip  tensor-gpu on the GPU: no CUDA toolkit (CUDA_HOME)")
+    if FULL:
+        run("tensor-gpu/tests/bits.bend on the JS lane", [BEND, "tensor-gpu/tests/bits.bend"],
+            lambda o, c: re.findall(r"^[0-9 ]+$", o, re.M) == ["0 0 2958", "0 0 0 0 0 0", "0 0 0"])
 
     # 2. shape errors that MUST fail to check
     for f, msg in [("tensor/tests/bad_matmul.bend", "expected"), ("tensor/tests/bad_reshape.bend", "expected"), ("tensor-array/tests/bad_matmul.bend", "expected"), ("tensor-array/tests/bad_grad.bend", "expected"), ("examples/runtime_batch_bad.bend", "expected"), ("examples/symbolic_reshape_bad.bend", "expected"), ("examples/square_transpose_bad.bend", "expected"), ("tensor-array/tests/bad_bands.bend", "expected")]:
@@ -119,6 +165,10 @@ def main():
         run("compile tensor-array/tests/onerow.bend", [BEND, "tensor-array/tests/onerow.bend", "-o", onerow])
         run("one row at par 4 runs the scalar loop: 50,257 x 768 gives par 0's bits (tensor-array/tests/onerow.bend)", [onerow, "--threads", "16"],
             lambda o, c: o.strip() == '"0 0 0"')
+        blocks = os.path.join(d, "blocks")
+        run("compile tensor-array/tests/blocks.bend", [BEND, "tensor-array/tests/blocks.bend", "-o", blocks])
+        run("matmul_precise sums k in blocks of 1024 from dotr; up to 1024 it is matmul (tensor-array/tests/blocks.bend)", [blocks, "--threads", "16"],
+            lambda o, c: o.strip() == '"0 22"')
     run("tensor-array/tests/checked.bend rejects wrong label counts", [BEND, "tensor-array/tests/checked.bend"], lambda o, c: o.strip() == "[1n, 0n, 0n, 1n, 0n, 0n]")
 
     # 3. tests against the Python references
