@@ -88,6 +88,8 @@ def main():
                 [tf, "+RTS", "--threads", t, "-RTS"], lambda o, c: o.split() == ["0", "0", "14832"] + ["0"] * 13)
         run("tensor-fork/tests/bits.bend refuses a bare --threads 16 (a runtime option outside +RTS ... -RTS)", [tf, "--threads", "16"],
             lambda o, c: c == 2 and "+RTS" in o)
+        run("the runtime takes the thread count: one core on +RTS --threads 1 -RTS, several on 16 (scripts/rts_probe.py)",
+            [PY, "scripts/rts_probe.py", tf])
         tfp = os.path.join(d, "tfp")
         run("compile tensor-fork/tests/precise.bend", [BEND, "tensor-fork/tests/precise.bend", "-o", tfp])
         for t in ["1", "16"]:
