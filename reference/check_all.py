@@ -81,11 +81,11 @@ def main():
         run("compile tensor-fork/tests/bits.bend", [BEND, "tensor-fork/tests/bits.bend", "-o", tf])
         for t in ["1", "16"]:
             run(f"tensor-fork gives tensor-array's bits, A and B intact: 14,832 products, the six public ones, three big ones, par1..par4 ({t} threads)",
-                [tf, "--threads", t], lambda o, c: o.split() == ["0", "0", "14832"] + ["0"] * 13)
+                [tf, "+RTS", "--threads", t, "-RTS"], lambda o, c: o.split() == ["0", "0", "14832"] + ["0"] * 13)
         tfp = os.path.join(d, "tfp")
         run("compile tensor-fork/tests/precise.bend", [BEND, "tensor-fork/tests/precise.bend", "-o", tfp])
         for t in ["1", "16"]:
-            run(f"tensor-fork's matmul_precise gives tensor-array's bits: 21 products ({t} threads)", [tfp, "--threads", t],
+            run(f"tensor-fork's matmul_precise gives tensor-array's bits: 21 products ({t} threads)", [tfp, "+RTS", "--threads", t, "-RTS"],
                 lambda o, c: o.strip() == '"0 21"')
     if FULL:
         run("tensor-fork/tests/bits.bend on the JS lane", [BEND, "tensor-fork/tests/bits.bend"],
@@ -106,12 +106,12 @@ def main():
         run("compile tensor-gpu/tests/bits.bend", [BEND, "tensor-gpu/tests/bits.bend", "-o", tg])
         for t in ["1", "16"]:
             run(f"tensor-gpu gives tensor-array's bits, A and B intact: 2,958 products, the six public ones, three big ones ({t} CPU threads)",
-                [tg, "--threads", t], lambda o, c: o.split() == gpu_want)
+                [tg, "+RTS", "--threads", t, "-RTS"], lambda o, c: o.split() == gpu_want)
         tk = os.path.join(d, "tk")
         run("compile tensor-gpu/tests/kernels.bend", [BEND, "tensor-gpu/tests/kernels.bend", "-o", tk])
         for t in ["1", "16"]:
             run(f"tensor-gpu's run1..run4 and run1_new..run4_new give their leaf's bits, inputs intact: 5 sizes ({t} CPU threads)",
-                [tk, "--threads", t], lambda o, c: o.split() == ["0"] * 10)
+                [tk, "+RTS", "--threads", t, "-RTS"], lambda o, c: o.split() == ["0"] * 10)
         cuda = os.environ.get("CUDA_HOME") or os.path.expanduser("~/.local/cuda12")
         if os.path.isdir(cuda):
             tgg = os.path.join(d, "tgg")
@@ -126,7 +126,7 @@ def main():
             run("compile tensor-gpu/tests/precise.bend for CUDA", [BEND, "tensor-gpu/tests/precise.bend", "-o", tgp], extra_env=env)
             run("tensor-gpu's matmul_precise gives tensor-array's bits on the GPU: 21 products", [tgp],
                 lambda o, c: o.strip() == '"0 21"', extra_env=env)
-            run("tensor-gpu's matmul_precise gives tensor-array's bits on the CPU threads: 21 products", [tgp, "--gpu", "off", "--threads", "16"],
+            run("tensor-gpu's matmul_precise gives tensor-array's bits on the CPU threads: 21 products", [tgp, "+RTS", "--gpu", "off", "--threads", "16", "-RTS"],
                 lambda o, c: o.strip() == '"0 21"', extra_env=env)
         else:
             print("skip  tensor-gpu on the GPU: no CUDA toolkit (CUDA_HOME)")
@@ -160,19 +160,19 @@ def main():
         run("cap_depth by doubling equals the n-step cap_pair (tensor-array/tests/cap.bend)", [cap], lambda o, c: o.strip() == "0")
         split = os.path.join(d, "split")
         run("compile tensor-array/tests/split.bend", [BEND, "tensor-array/tests/split.bend", "-o", split])
-        run("split_depth picks 0 or par, and par 4 gives par 0's bits (tensor-array/tests/split.bend)", [split, "--threads", "16"],
+        run("split_depth picks 0 or par, and par 4 gives par 0's bits (tensor-array/tests/split.bend)", [split, "+RTS", "--threads", "16", "-RTS"],
             lambda o, c: o.strip() == '"0 3 0 0 3 0 4\\n0 0 0 0 0 0"')
         parseq = os.path.join(d, "parseq")
         run("compile tensor-array/tests/parseq.bend", [BEND, "tensor-array/tests/parseq.bend", "-o", parseq])
-        run("parallel = sequential: 11,664 products at depths 1-4 give depth 0's bits (tensor-array/tests/parseq.bend)", [parseq, "--threads", "16"],
+        run("parallel = sequential: 11,664 products at depths 1-4 give depth 0's bits (tensor-array/tests/parseq.bend)", [parseq, "+RTS", "--threads", "16", "-RTS"],
             lambda o, c: o.strip() == '"0 11664"')
         onerow = os.path.join(d, "onerow")
         run("compile tensor-array/tests/onerow.bend", [BEND, "tensor-array/tests/onerow.bend", "-o", onerow])
-        run("one row at par 4 runs the scalar loop: 50,257 x 768 gives par 0's bits (tensor-array/tests/onerow.bend)", [onerow, "--threads", "16"],
+        run("one row at par 4 runs the scalar loop: 50,257 x 768 gives par 0's bits (tensor-array/tests/onerow.bend)", [onerow, "+RTS", "--threads", "16", "-RTS"],
             lambda o, c: o.strip() == '"0 0 0"')
         blocks = os.path.join(d, "blocks")
         run("compile tensor-array/tests/blocks.bend", [BEND, "tensor-array/tests/blocks.bend", "-o", blocks])
-        run("matmul_precise sums k in blocks of 1024 from dotr; up to 1024 it is matmul (tensor-array/tests/blocks.bend)", [blocks, "--threads", "16"],
+        run("matmul_precise sums k in blocks of 1024 from dotr; up to 1024 it is matmul (tensor-array/tests/blocks.bend)", [blocks, "+RTS", "--threads", "16", "-RTS"],
             lambda o, c: o.strip() == '"0 22"')
     run("tensor-array/tests/checked.bend rejects wrong label counts", [BEND, "tensor-array/tests/checked.bend"], lambda o, c: o.strip() == "[1n, 0n, 0n, 1n, 0n, 0n]")
 
