@@ -44,6 +44,10 @@ def check_toolchain():
 
 def main():
     check_toolchain()
+    # 0. every --threads and --gpu given to a Bend program sits between +RTS and -RTS (Bend 2.0.38 passes a bare one to
+    # the program and runs on the default thread count, silently); the self-test shows the check tells them apart
+    run("scripts/check_rts.py --self-test", [PY, "scripts/check_rts.py", "--self-test"])
+    run("runtime options inside +RTS ... -RTS (scripts/check_rts.py)", [PY, "scripts/check_rts.py"])
     # 1. proofs: checker and audited kernel, in each package
     for pkg in ["nat-lemmas", "bpe", "tensor", "tensor-array", "autograd"]:
         f = f"{pkg}/main.bend"
