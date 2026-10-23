@@ -27,6 +27,11 @@ def run(name, cmd, ok_if=None, timeout=3600, extra_env=None):
     return out
 
 
+def outside_proofs(o):
+    """The defs a file has outside the proofs, as the checker lists them ("defs that depend on @unsafe: a, b")."""
+    return [d for l in re.findall(r"^defs that depend on [^:]+: (.+)$", o, re.M) for d in l.split(", ")]
+
+
 def check_toolchain():
     """Fail early, with a clear message, when the pinned toolchain is not the one in use."""
     bv = subprocess.run([BEND, "version"], capture_output=True, text=True, env=ENV).stdout.split()
@@ -51,7 +56,7 @@ def main():
 
     # 1b. binary-read: the one package with foreign code, kept to one def and out of the packages with laws
     run("binary-read/main.bend: read_f32 is its only foreign def", [BEND, "binary-read/main.bend"],
-        lambda o, c: "1 def relies on unsafe or foreign code" in o and re.findall(r"^- (\S+)$", o, re.M) == ["read_f32"])
+        lambda o, c: "1 def relies on unsafe or foreign code" in o and outside_proofs(o) == ["read_f32"])
     laws = [f"{p}/main.bend" for p in ["nat-lemmas", "bpe", "tensor", "tensor-array", "autograd"]]
     clean = not any("binary-read" in open(os.path.join(ROOT, f)).read() for f in laws)
     results.append(clean)
@@ -67,7 +72,7 @@ def main():
     # defs are exactly the blocks, the fork tree and what reaches them, no package with laws imports it, and it gives tensor-array's bits
     fork_defs = ["blocks1", "join2", "blocks2", "join3", "blocks3", "join4", "blocks4", "par1", "par2", "par3", "par4", "pk_par", "rpar", "cpar", "t8_tree", "t8_go", "gemm_fork", "gemm_rows", "gemm_any2", "gemm_any", "matmul", "matmul_acc", "matmul_nt", "matmul_nt_acc", "matmul_tn", "matmul_tn_acc", "mp_s3", "mp_s2", "mp_step", "mp_go", "mm_precise2", "matmul_precise"]
     run("tensor-fork/main.bend: its @unsafe defs are the fork tree and what reaches it", [BEND, "tensor-fork/main.bend"],
-        lambda o, c: f"{len(fork_defs)} defs rely on unsafe or foreign code" in o and re.findall(r"^- (\S+)$", o, re.M) == fork_defs)
+        lambda o, c: f"{len(fork_defs)} defs rely on unsafe or foreign code" in o and outside_proofs(o) == fork_defs)
     clean = not any("tensor-fork" in open(os.path.join(ROOT, f)).read() for f in laws)
     results.append(clean)
     print(f"{'ok  ' if clean else 'ERROR'} no package with laws imports tensor-fork")
@@ -91,7 +96,7 @@ def main():
     # with laws imports it, and it gives tensor-array's bits on the CPU threads and, when CUDA is there, on the GPU
     gpu_defs = ["mm", "put", "tile", "leaf_if", "leaf", "tree", "tree_new", "bang_new", "bang", "run_e", "gemm_new", "gemm", "matmul", "matmul_acc", "matmul_nt", "matmul_nt_acc", "matmul_tn", "matmul_tn_acc", "join2", "join3", "join4", "tree1", "root1", "root1_new", "go1", "go1_new", "run1", "run1_new", "tree2", "root2", "root2_new", "go2", "go2_new", "run2", "run2_new", "tree3", "root3", "root3_new", "go3", "go3_new", "run3", "run3_new", "tree4", "root4", "root4_new", "go4", "go4_new", "run4", "run4_new", "blocks_acc", "precise_c", "mm_precise3", "mm_precise2", "matmul_precise"]
     run("tensor-gpu/main.bend: its @unsafe defs are the bang's tree and what reaches it", [BEND, "tensor-gpu/main.bend"],
-        lambda o, c: f"{len(gpu_defs)} defs rely on unsafe or foreign code" in o and re.findall(r"^- (\S+)$", o, re.M) == gpu_defs)
+        lambda o, c: f"{len(gpu_defs)} defs rely on unsafe or foreign code" in o and outside_proofs(o) == gpu_defs)
     clean = not any("tensor-gpu" in open(os.path.join(ROOT, f)).read() for f in laws)
     results.append(clean)
     print(f"{'ok  ' if clean else 'ERROR'} no package with laws imports tensor-gpu")
@@ -142,7 +147,7 @@ def main():
     with tempfile.TemporaryDirectory() as d:
         c_out = os.path.join(d, "par_bands.c")
         run("Bands.matvec compiles to a parallel join (no sequential fallback)", [BEND, "tensor-array/tests/par_bands.bend", "-o", c_out],
-            lambda o, c: c == 0 and os.path.exists(c_out) and re.search(r"FID_\w*_BMV_J\d+", open(c_out).read()) is not None)
+            lambda o, c: c == 0 and os.path.exists(c_out) and re.search(r"FID_\w*_bmv_j\d+", open(c_out).read()) is not None)
     with tempfile.TemporaryDirectory() as d:
         t8 = os.path.join(d, "t8")
         run("compile tensor-array/tests/t8.bend", [BEND, "tensor-array/tests/t8.bend", "-o", t8])
