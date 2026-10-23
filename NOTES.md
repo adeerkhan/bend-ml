@@ -1339,5 +1339,8 @@ through pull request #14 (CI green).
 - **`make check-full`: 92/92**; `reference/test_published.py`: the published packages pass on 2.0.38.
 - **Packages.** No source changed, so none is republished. tensor-gpu's header comment still says `--gpu off`; it goes
   with the next real change to tensor-gpu, as `bmv`'s comment did for 2.0.37.
-- Not yet measured: GPT-2's speed on the same commit with 2.0.37 and 2.0.38 (bend2-lab's harness builds both; it needs
-  mains power).
+- **GPT-2 timings, the same commit (`34f2be8`) built with 2.0.37 and 2.0.38**, 7 alternated rounds in one session on
+  mains power (the evidence harness, `gpt2` block; medians and interquartile ranges, ms per token): one thread 136.6
+  (135.5-137.1) on 2.0.37 against 136.2 (134.6-137.4) on 2.0.38; 16 threads 105.0 (104.4-106.4) against 106.1
+  (104.7-106.8). No difference beyond the spread, the same tokens, the same peak memory; the binary is 4 KB smaller
+  (402,656 bytes against 406,656).
