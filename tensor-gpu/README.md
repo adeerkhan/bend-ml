@@ -30,7 +30,7 @@ def prod(x: TA.Mat<256n, 576n>, w: TA.Mat<1536n, 576n>) -> TA.MMulNT<256n, 576n,
 ```
 
 Build with CUDA to get the GPU: `CUDA_HOME=... bend x.bend -o x` writes `x` and `x.gpu`. Without CUDA, or with
-`./x --gpu off`, the same bangs run on the CPU threads, with the same bits.
+`./x +RTS --gpu off -RTS`, the same bangs run on the CPU threads, with the same bits.
 
 ## How it works
 
