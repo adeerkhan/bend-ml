@@ -82,6 +82,8 @@ next to v1.2.2, PyTorch and NumPy again, which came out within 2% of their numbe
 dfdx and candle keep theirs. GPT-2's cost per token is unchanged since v1.2.2 (139 ms on one thread, 107 on 16); what
 changed is the start (1.0 s instead of 5.4, at 831 MB instead of 1,464 MB) and training: an MNIST batch takes 20.0 ms
 instead of 29.9 on one thread, 7.7 instead of 12.8 on 16.
+Bend 2.0.39 alone then took a token to 128 ms on one thread and 86 on 16, against 138 and 106 for the same commit
+built with 2.0.38 (idle machine, 7 alternated rounds, 2026-10-24); the charts below still show the earlier numbers.
 
 <p align="center"><img src="docs/media/deck/frames/04-vs-references.webp" alt="GPT-2 small, ms per token: PyTorch 18.5 and 9.4, NumPy 18.5 and 11.2, llama.cpp 22.2 and 9.8, bend-ml v1.3.2 139 and 107, llm.c without a key/value cache 529 and 142, on 1 and 16 threads" width="90%"></p>
 
