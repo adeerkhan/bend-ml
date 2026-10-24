@@ -1413,5 +1413,7 @@ through pull request #14 (CI green).
   --check-readme`: 29 laws, README ok. `make check-full`: 96/96.
 - The other lemmas B6 named in the plan of 2026-10-15 (`drop_app`, `len_take`, `len_softmax`'s list part) are no longer
   in BendTorch. Its `sub0` and `app2` are one-liners tied to their proofs and stay where they are.
-- Not published. As `bend-ml-nat-lemmas@0.1.2.0` it would let BendTorch import both lemmas instead of keeping copies;
-  publishing it, and then pointing BendTorch at it, is Renan's call.
+- **Published** as `bend-ml-nat-lemmas@0.1.2.0`, hash `0x09966385f3a8541fb22fd49450cdf477` (2 files). The README's
+  table, `examples/symbolic_reshape.bend` and `reference/test_published.py` (which now type-checks `add4` against its
+  statement) use it. tensor, bpe-tokenizer and autograd keep importing 0.1.0.0, as published. BendTorch imports the two
+  lemmas from it instead of keeping copies.
