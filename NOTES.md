@@ -4,7 +4,7 @@ Date: 2026-10-03. Everything below was verified on the machine or in a primary s
 
 ## Pinned version
 
-- **Bend 2.0.38** (`bend version`), since 2026-10-23 (2.0.37 from 2026-10-13, 2.0.36 from 2026-10-10, 2.0.35 before). Pin this version until further notice.
+- **Bend 2.0.39** (`bend version`), since 2026-10-24 (2.0.38 from 2026-10-23, 2.0.37 from 2026-10-13, 2.0.36 from 2026-10-10, 2.0.35 before). Pin this version until further notice.
 - Official repository: `github.com/bendlang/bend` (not `HigherOrderCO/Bend`, which is Bend 1).
 - Installed with `curl -fsSL https://bend-lang.com/install.sh | sh` (script read before running: it downloads the GitHub release, checks the SHA256, installs only into `~/.bend`, no sudo).
 - Update: `bend update` (runs the installer again). Do not update without recording it here, since Bend 2 changes fast.
@@ -1363,3 +1363,16 @@ through pull request #14 (CI green).
   On this repository: the tests of tensor-fork, tensor-gpu and tensor-array refuse arguments (five of them returned a
   String and now print it, so `check_all.py` compares the text without quotes); the probe runs tensor-fork's bits test,
   1.00 and 6.5-6.7 cores.
+
+## Bend 2.0.39 (2026-10-24)
+
+- **Pin.** The same checklist as 2.0.38's: `scripts/setup.sh` (version and both SHA256 sums, computed from the release's
+  tarballs), `check_all.py`, the CI step, the README badge and setup line, CONTRIBUTING, the `Bend:` line of each
+  package README, CLAUDE.md and "Pinned version". Nothing in the code changed.
+- **What could touch us:** `bend --publish` now sends only files inside the entry's directory (a `../` import, a symlink
+  out of it or a linked `LICENSE` is refused before mining, #1836). No package folder here has a symlink or a `../`
+  import, so publishing works as before. A read-only walk of a list now borrows it when a sum type mixes a word and a box
+  (#1805), and a memory fault ends the program by its signal instead of exit 1.
+- **`make check-full`: 96/96** (the 92 of 2.0.38 and the runtime-option guards), `Bands.matvec` keeps its parallel join,
+  and `reference/test_published.py`: the published packages pass on 2.0.39.
+- **Packages.** No source changed, so none is republished.
