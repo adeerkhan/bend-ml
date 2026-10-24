@@ -1395,3 +1395,12 @@ through pull request #14 (CI green).
 - **Published** as `bend-ml-binary-read@0.2.0.0`, hash `0x5240900a1da5d0b346237e15fbea87a9` (6 files). The README's
   table, the GPT-2 demo and `reference/test_published.py` (which now also reads BF16 at a byte offset on both lanes) use
   it. I posted the #1843 comment the same day.
+
+## GPT-2 on Bend 2.0.39 against 2.0.38 (2026-10-24)
+
+- The same commit (727165d) built with both, the cross-system harness, idle machine, 7 alternated rounds: 128.2 ms a
+  token on one thread with 2.0.39 against 138.1 with 2.0.38 (ranges 127.3-129.9 and 135.9-140.2), 85.9 against 106.1 on
+  16 threads (83.2-87.3 and 103.6-109.0). The same output with both; peak memory 831 MB on one thread with both.
+- Hardware counters (`perf stat`, 33 tokens, 3 alternated rounds, one thread): 1.4% fewer instructions and 7% fewer
+  cycles with 2.0.39, about as many cache misses: more instructions per cycle, not less work.
+- The README says it in a line; its charts still show the earlier numbers.
