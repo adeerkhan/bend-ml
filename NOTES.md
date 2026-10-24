@@ -1404,3 +1404,14 @@ through pull request #14 (CI green).
 - Hardware counters (`perf stat`, 33 tokens, 3 alternated rounds, one thread): 1.4% fewer instructions and 7% fewer
   cycles with 2.0.39, about as many cache misses: more instructions per cycle, not less work.
 - The README says it in a line; its charts still show the earlier numbers.
+
+## B6: BendTorch's general lemmas in nat-lemmas (2026-10-24)
+
+- `add4` (`(a + b) + (c + d) = (a + c) + (b + d)`) and `mul_dist_l` (`k * (a + b) = k*a + k*b`) move from BendTorch's
+  `PROOF.bend` into `nat-lemmas/main.bend` as laws, with the same proofs over the package's own `add_assoc`,
+  `add_swap`, `mul_comm` and `mul_dist`. `bend nat-lemmas/main.bend --verdict`: ALL PROOFS CHECK. `list_laws.py
+  --check-readme`: 29 laws, README ok. `make check-full`: 96/96.
+- The other lemmas B6 named in the plan of 2026-10-15 (`drop_app`, `len_take`, `len_softmax`'s list part) are no longer
+  in BendTorch. Its `sub0` and `app2` are one-liners tied to their proofs and stay where they are.
+- Not published. As `bend-ml-nat-lemmas@0.1.2.0` it would let BendTorch import both lemmas instead of keeping copies;
+  publishing it, and then pointing BendTorch at it, is Renan's call.
