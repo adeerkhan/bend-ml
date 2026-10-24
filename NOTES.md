@@ -1376,3 +1376,21 @@ through pull request #14 (CI green).
 - **`make check-full`: 96/96** (the 92 of 2.0.38 and the runtime-option guards), `Bands.matvec` keeps its parallel join,
   and `reference/test_published.py`: the published packages pass on 2.0.39.
 - **Packages.** No source changed, so none is republished.
+
+## binary-read 0.2.0.0: 64-bit offsets, BF16, reads into an array (2026-10-24)
+
+- **Why.** BendTorch's loader for SmolLM2-1.7B needs offsets past 4 GiB (a 3.4 GB BF16 safetensors file, a 6.8 GB F32
+  one) and BF16 reads. Its night branch `reader64` (2026-10-21) had them in a vendored copy of this package, imported
+  by a `../` path. Since Bend 2.0.39 `bend --publish` refuses files outside the entry's directory (#1836), so they move
+  here, where BendTorch can import them from the hub.
+- **What.** Five new effects next to `read_f32`, which is unchanged: `size64`, `read_f32_at`, `read_bf16_at`,
+  `read_f32_into`, `read_bf16_into` (C in `read_at.c`, JavaScript in `read_at.js`, the code of the vendored copy). Base
+  in 2.0.39 still has no 64-bit integer and `File.read_at` takes a U32 offset, so offsets and sizes cross as two U32s
+  (hi, lo).
+- **Tests** (`binary-read/tests/test_read_at.py` over `read_at.bend`, in `make check` on both lanes): 28 reads around
+  2, 4 and 8 GiB of a sparse 8 GiB file give the file's bits, including short reads, a hole, reads past the end, reads
+  into a cell offset with the neighbouring cells untouched, and the U32 `read_f32` up to 4 GiB. Reads larger than the
+  array stop at its capacity. 10,019 BF16 numbers written by PyTorch, at offsets 0 and 6, equal `bf16.to(torch.float32)`
+  bit for bit. The JS lane canonicalizes NaN payloads, as for `read_f32`. `make check`: 89/89.
+- **Not published yet.** As `bend-ml-binary-read@0.2.0.0` it is Renan's to publish. After that: the README's package
+  table, `reference/test_published.py`.
