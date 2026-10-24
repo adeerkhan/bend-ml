@@ -53,8 +53,8 @@ import bend-ml-bpe-tokenizer@0.1.3.0/main.bend as BPE
 <p align="center"><img src="docs/media/diagram.svg" alt="The six packages: nat-lemmas is imported by bpe-tokenizer, tensor and autograd; tensor-array stands alone; binary-read is foreign code; the GPT-2 demo uses bpe-tokenizer, tensor, tensor-array and binary-read; the MNIST demo uses tensor and tensor-array" width="90%"></p>
 
 Every package with laws passes `bend X/main.bend --verdict`, the re-check by Bend's Lean-proved kernel, with no `@unsafe`
-and no `?TODO`. `bend-ml-binary-read` is the exception by design: it is a file read written in C and JavaScript, one
-definition, and no package with laws imports it (`make check` checks both).
+and no `?TODO`. `bend-ml-binary-read` is the exception by design: its reads are written in C and JavaScript, six
+definitions, and no package with laws imports it (`make check` checks both).
 
 Numbers are a different matter: `F32` is not a real number, so the numerics are tested against PyTorch, NumPy and
 `tiktoken` instead of proved. [`docs/AUDIT.md`](docs/AUDIT.md) lists the trust base.
