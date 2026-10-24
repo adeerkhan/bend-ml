@@ -31,6 +31,8 @@ A parameter carries `+` when it may be used more than once (Bend's affine-variab
 | `mul_comm` | `a * b = b * a` (multiplication is commutative) |
 | `mul_dist` | `a*c + b*c = (a + b)*c` (distributivity) |
 | `mul_assoc` | `a * (b * c) = (a * b) * c` (multiplication is associative) |
+| `add4` | `(a + b) + (c + d) = (a + c) + (b + d)` (the middle terms of a four-term sum swap) |
+| `mul_dist_l` | `k * (a + b) = k*a + k*b` (distributivity from the left) |
 | `mul_one_l`, `mul_one_r` | `1 * a = a` and `a * 1 = a` |
 | `append_nil` | `xs ++ [] = xs` |
 | `append_assoc` | `(xs ++ ys) ++ zs = xs ++ (ys ++ zs)` |
