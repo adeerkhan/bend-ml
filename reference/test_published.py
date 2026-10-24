@@ -23,6 +23,9 @@ import {ag}/main.bend as AG
 def law_nat(a: Nat, +b: Nat) -> {{Nat.add(a, b) == Nat.add(b, a) : Nat}}:
   NL.add_comm(a, b)
 
+def law_nat4(+a: Nat, +b: Nat, +c: Nat, +d: Nat) -> {{Nat.add(Nat.add(a, b), Nat.add(c, d)) == Nat.add(Nat.add(a, c), Nat.add(b, d)) : Nat}}:
+  NL.add4(a, b, c, d)
+
 def law_bpe(+n: Nat, +corpus: List<&2, Nat>, +bs: List<&2, Nat>) -> {{BPE.decode(BPE.train(n, 0n, BPE.lift(corpus)), BPE.encode(BPE.train(n, 0n, BPE.lift(corpus)), BPE.lift(bs))) == bs : List<&2, Nat>}}:
   BPE.roundtrip_trained(n, corpus, bs)
 
