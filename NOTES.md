@@ -1392,5 +1392,6 @@ through pull request #14 (CI green).
   into a cell offset with the neighbouring cells untouched, and the U32 `read_f32` up to 4 GiB. Reads larger than the
   array stop at its capacity. 10,019 BF16 numbers written by PyTorch, at offsets 0 and 6, equal `bf16.to(torch.float32)`
   bit for bit. The JS lane canonicalizes NaN payloads, as for `read_f32`. `make check`: 89/89.
-- **Not published yet.** As `bend-ml-binary-read@0.2.0.0` it is Renan's to publish. After that: the README's package
-  table, `reference/test_published.py`.
+- **Published** as `bend-ml-binary-read@0.2.0.0`, hash `0x5240900a1da5d0b346237e15fbea87a9` (6 files). The README's
+  table, the GPT-2 demo and `reference/test_published.py` (which now also reads BF16 at a byte offset on both lanes) use
+  it. I posted the #1843 comment the same day.
