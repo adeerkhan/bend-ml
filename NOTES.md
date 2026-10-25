@@ -1417,3 +1417,29 @@ through pull request #14 (CI green).
   table, `examples/symbolic_reshape.bend` and `reference/test_published.py` (which now type-checks `add4` against its
   statement) use it. tensor, bpe-tokenizer and autograd keep importing 0.1.0.0, as published. BendTorch imports the two
   lemmas from it instead of keeping copies.
+
+## tensor-array 0.1.15.0: eight partial sums a dot, two cells of C a pass (2026-10-25)
+
+- **Why.** In BendTorch's SmolLM2-135M step the products are 76-86% of one thread's time. `perf annotate` of `t8_dot`:
+  clang vectorizes it with SSE, about 20 instructions and 3.9 cycles a cell of 8, and the loop waits on its four sums'
+  chain (two dependent additions a cell). Six variants were tried on SmolLM2's three linear-layer products (bend2-lab).
+  Eight sums alone gave 7.6% fewer cycles; cells of 16 cut instructions but not cycles on the short dots; two columns of
+  C a pass with today's order made clang's vectorizer shuffle the two dots' sums across lanes (2x slower).
+- **What.** Each sum is now lane q of every cell (product p into sum p mod 8), combined at the end as `dotr` combines
+  its eight rotating sums (`t8_comb` with rot = k mod 8), and `t8_cols`/`t8_lcols` compute two cells of C in one pass
+  over k, so each cell of A is read once for both. The scalar loop (`dotr`, one-row products, `Bands.matvec`) keeps
+  the same order: `tests/t8.bend` still gives 0 differing words between the cells of 8 and the scalar loop, every k
+  from 0 to 19, the three layouts, sequential and parallel.
+- **Result** (idle machine, 3 alternated rounds): over the three products, one thread, 315.6 -> 243.4 Mcycles (-23%;
+  `nt` -29%, `tn` -7%, `nn` -31%); 16 threads 8-24% faster. Against a float64 dot the error is about 25% lower at k =
+  256 to 1536 (a simulation of both orders on 20,000 random dots each). Every product's last bits move.
+- **The cost**: one-row products, where the scalar loop now rotates eight sums. GPT-2's generation (all matrix ·
+  vector) took 5.0 s instead of 4.65 s for 32 tokens on one thread (busy machine, 2 rounds), the same on 16 threads; two
+  products a step was worse (5.9 s). So the GPT-2 demo and the `Bands` benchmarks stay on 0.1.14.0, and the MNIST
+  demo (batches of 100) moves to 0.1.15.0.
+- **tensor-fork 0.1.3.0** (k mod 8 to the cells) and **tensor-gpu 0.1.3.0** (eight sums a cell, generated in 4 x 2
+  tiles: 4 x 4 would carry 128 sums a lane; on 2026-10-25 the four products of the README took 15.5 ms in all against
+  0.1.2.1's 16.0, 2 rounds, CPU not idle) on the new tensor-array, both checked with its bits on the CPU and the GPU.
+- Published: `bend-ml-tensor-array@0.1.15.0` `0x054428f37dcef26dfcdf73a81af76b07`, `bend-ml-tensor-fork@0.1.3.0`
+  `0x75a8d2c438b6e6aeea7459234622dfd6`, `bend-ml-tensor-gpu@0.1.3.0` `0x44d4ef8d5e110dfdde14372a07d96ade`. `make
+  check-full` 99/99 (GPU included); `reference/test_published.py` passes on all three.
