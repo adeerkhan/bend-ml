@@ -1443,3 +1443,22 @@ through pull request #14 (CI green).
 - Published: `bend-ml-tensor-array@0.1.15.0` `0x054428f37dcef26dfcdf73a81af76b07`, `bend-ml-tensor-fork@0.1.3.0`
   `0x75a8d2c438b6e6aeea7459234622dfd6`, `bend-ml-tensor-gpu@0.1.3.0` `0x44d4ef8d5e110dfdde14372a07d96ade`. `make
   check-full` 99/99 (GPU included); `reference/test_published.py` passes on all three.
+
+## tensor-array 0.1.16.0: 0.1.14.0's code again (2026-10-25)
+
+- Moving BendTorch to 0.1.15.0 made its SmolLM2-135M step slower, not faster: `train 1` on one thread 14.2 -> 24.6 s,
+  `train 3` on 16 threads 10.8 -> 13.0 s (busy machine, 2 rounds each, the same programs otherwise). `perf annotate`:
+  inside the whole program clang vectorized `t8_dot2` (the two-cell pass) with shuffles across lanes, as it did with
+  the probe's c0, where in the probe alone it had vectorized it cleanly. The probe's 23% does not carry over.
+- With one cell a pass and 0.1.15.0's eight sums (the same bits as 0.1.15.0), the step took 14.1 s on one thread and
+  2% less on 16: nothing gained, every product's bits moved, and `test_tiny_rt`'s 3 x 24 run failed its per-tensor
+  rule (b0.wu at 5.1x PyTorch float32's distance from float64, 2.4x with the old order; the whole model at 1.13x against
+  0.99x). So the eight-sum order is dropped.
+- Published 0.1.14.0's code as `bend-ml-tensor-array@0.1.16.0` `0x0159e1f0f11cc1d285ac6a993d19ba8a`, with
+  `bend-ml-tensor-fork@0.1.4.0` `0xd13098b0f80022977b3ddb83a57e3c50` and `bend-ml-tensor-gpu@0.1.4.0`
+  `0x6a4b8944ce74c49ba240bff44915995a` (0.1.2.0's and 0.1.2.1's code) on it, so that the newest versions on BendHub are
+  the good ones; their bits are 0.1.14.0's. The READMEs mark 0.1.15.0 and 0.1.3.0 as not recommended. `make check-full`
+  99/99 with the published packages; `reference/test_published.py` passes.
+- Lesson: a loop's speed measured in a probe is not its speed inside the program that uses it (clang's choices depend
+  on the code around it; `memory/compiler-schedule-noise.md`). Time a change to a shared kernel in its biggest user
+  before publishing it.
