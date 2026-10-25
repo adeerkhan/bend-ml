@@ -1,8 +1,8 @@
 # bend-ml-tensor-fork: bend-ml-tensor-array's products, with the parallel blocks sharing their operands; and par1..par4,
 # any kernel over blocks of a range sharing up to four arrays.
 #
-#   import bend-ml-tensor-array@0.1.14.0/main.bend as TA
-#   import bend-ml-tensor-fork@0.1.2.0/main.bend as TF
+#   import bend-ml-tensor-array@0.1.15.0/main.bend as TA
+#   import bend-ml-tensor-fork@0.1.3.0/main.bend as TF
 #   TF.matmul(n, k, m, par, a, b)      # the same arguments, result type and bits as TA.Mat.matmul
 #
 # The six products (matmul, matmul_nt, matmul_tn and their accumulating forms) take tensor-array's Mat values and
@@ -21,7 +21,7 @@
 # the blocks are the halves of the fork tree, as in tensor-array's own split. tests/bits.bend checks both by sampling.
 # All of it is Bend: no foreign code.
 import Base
-import bend-ml-tensor-array@0.1.14.0/main.bend as TA
+import bend-ml-tensor-array@0.1.15.0/main.bend as TA
 
 # ---- blocks: any kernel over ranges of shared arrays ----
 # parN runs a kernel f over 2^d blocks of the range 0 .. cnt-1 in a tree of parallel lets; every block gets a handle to
@@ -214,7 +214,7 @@ def t8_go(+ac: Bool, d: Nat, +n: Nat, +m: Nat, +tk: Nat, +tku: U32, +rot: Nat, c
 # (arow, sa, sb, bcol); A and B come back intact
 @unsafe
 def gemm_fork(+ac: Bool, +d: Nat, +n: Nat, +m: Nat, +k: Nat, +arow: U32, +sa: U32, +sb: U32, +bcol: U32, a: Array<F32>, b: Array<F32>, c: Array<F32>) -> TA.G:
-  t8_go(ac, d, n, m, Nat.div(Nat.add(k, 7n), 8n), U32.from_nat(Nat.div(Nat.add(k, 7n), 8n)), Nat.mod(k, 4n), c, TA.t8_pk2(pk_par(d, n, Nat.div(Nat.add(k, 7n), 8n), k, arow, sa, a), pk_par(d, m, Nat.div(Nat.add(k, 7n), 8n), k, bcol, sb, b)))
+  t8_go(ac, d, n, m, Nat.div(Nat.add(k, 7n), 8n), U32.from_nat(Nat.div(Nat.add(k, 7n), 8n)), Nat.mod(k, 8n), c, TA.t8_pk2(pk_par(d, n, Nat.div(Nat.add(k, 7n), 8n), k, arow, sa, a), pk_par(d, m, Nat.div(Nat.add(k, 7n), 8n), k, bcol, sb, b)))
 
 # two or more rows: the shared tree when d > 0, tensor-array's sequential cells at d = 0
 def gemm_rows(+ac: Bool, d: Nat, +n: Nat, +m: Nat, +k: Nat, +arow: U32, +sa: U32, +sb: U32, +bcol: U32, a: Array<F32>, b: Array<F32>, c: Array<F32>) -> TA.G:
