@@ -6,12 +6,13 @@ when there is one; and, since 0.1.1.0, bangs over any leaf code written in plain
 a training step (element-wise layers, norms, attention, the optimizer). It is **not proved**, and says so: like [`bend-ml-tensor-fork`](../tensor-fork), it shares arrays
 between the leaves of a fork tree through Base's `@unsafe` `Array.fork`.
 
-- Bend: **2.0.39** · License: MIT · Depends on `bend-ml-tensor-array@0.1.14.0`. Versions on BendHub: 0.1.0.0, the
+- Bend: **2.0.39** · License: MIT · Depends on `bend-ml-tensor-array@0.1.15.0`. Versions on BendHub: 0.1.0.0, the
   products alone (hash `0xb00297062e21c56b88008f0c5387c0a0`); 0.1.1.0, with `run1`..`run4`
   (`0x92c8fe8f8abfa0e0018d7f1c3ddd061c`), both on tensor-array 0.1.12.0; 0.1.1.1, the same code on tensor-array
   0.1.13.0; 0.1.2.0, `matmul_precise` (tensor-array 0.1.14.0's opt-in precise product, a bang a block, its slices copied on the
   host) on tensor-array 0.1.14.0; 0.1.2.1, the same product with every block's bang starting at its place in A and B
-  (no copy, no pages pulled back): a SmolLM2-sized block step on the GPU 975 -> ~695 ms for 3 (2026-10-18).
+  (no copy, no pages pulled back): a SmolLM2-sized block step on the GPU 975 -> ~695 ms for 3 (2026-10-18); 0.1.3.0,
+  tensor-array 0.1.15.0's order (eight partial sums a cell) in 4 x 2 tiles (2026-10-25).
 - `bend tensor-gpu/main.bend` → `SOME PROOFS FAIL`, naming the 54 defs that rely on `@unsafe` code. All of it is Bend:
   no foreign code, no CUDA written by hand.
 - Tests: `tests/bits.bend`, against tensor-array, bit for bit, on the GPU, on 1 and 16 CPU threads and on the JS lane;
@@ -22,8 +23,8 @@ between the leaves of a fork tree through Base's `@unsafe` `Array.fork`.
 
 ```python
 import Base
-import bend-ml-tensor-array@0.1.14.0/main.bend as TA
-import bend-ml-tensor-gpu@0.1.2.1/main.bend as TG
+import bend-ml-tensor-array@0.1.15.0/main.bend as TA
+import bend-ml-tensor-gpu@0.1.3.0/main.bend as TG
 
 def prod(x: TA.Mat<256n, 576n>, w: TA.Mat<1536n, 576n>) -> TA.MMulNT<256n, 576n, 1536n>:
   TG.matmul_nt(256n, 576n, 1536n, 0n, x, w)   # instead of TA.Mat.matmul_nt(...); par is ignored
@@ -40,9 +41,9 @@ past the last tile write nothing). Every node shares A, B and C (no copy), as up
 reused a block whose pages were on the device, and zeroing it there pulled them back over PCIe (9.2 → 6.0 ms on a
 256 x 576 x 1536 product).
 
-The bits: tensor-array's dot product keeps four partial sums. Product p goes to sum p mod 4, in increasing p, each sum
-starting at +0.0, and the four are combined at the end in an order that depends on k mod 4 (`TA.t8_comb`). Each leaf does
-the same for each of its 16 cells, four steps of k a turn; the steps past k in the last turn add +0.0, which leaves a sum
+The bits: tensor-array's dot product keeps eight partial sums. Product p goes to sum p mod 8, in increasing p, each sum
+starting at +0.0, and the eight are combined at the end in an order that depends on k mod 8 (`TA.t8_comb`). Each leaf
+does the same for each of its 8 cells (a 4 x 2 tile), eight steps of k a turn; the steps past k in the last turn add +0.0, which leaves a sum
 unchanged, since a sum that starts at +0.0 is never -0.0. An accumulating product adds a cell to C once, with
 tensor-array's own `cwr`. Bend builds the device code without fused multiply-add. So every cell has tensor-array's bits,
 on any tile size and any number of leaves; `tests/bits.bend` checks 2,958 products (n, m = 1..9 with k = 0, 1, 3, 8, 9,
@@ -103,9 +104,11 @@ medians of 3 alternated rounds, 2026-10-18 (an idle machine; the final numbers c
 
 What it costs and what is left:
 
-- Keeping tensor-array's four partial sums costs a lot of registers: the device program uses 241 a lane with 4 x 4
-  tiles (2 blocks of 128 lanes per SM). A kernel that keeps one sum a cell ran the 512 x 4096 x 512 product in 3.5 ms
-  instead of 8.2, with different bits.
+- Keeping tensor-array's partial sums costs a lot of registers: up to 0.1.2.1 the device program used 241 a lane with
+  4 x 4 tiles and four sums a cell (2 blocks of 128 lanes per SM). 0.1.3.0 keeps eight sums a cell in 4 x 2 tiles, the
+  same 64 sums a lane; on 2026-10-25 (2 rounds, CPU not idle) the four products above took about as long as with
+  0.1.2.1 (15.5 against 16.0 ms in all; 2 x 4 and 2 x 2 tiles were slower on the big product). A kernel that keeps one
+  sum a cell ran the 512 x 4096 x 512 product in 3.5 ms instead of 8.2, with different bits.
 - Each bang has a fixed cost of about 0.8-1.4 ms (the runtime grows the tree on one group of lanes first), and arrays
   the host touched between bangs move over PCIe. Small products are faster on the CPU.
 - The leaves' order on the lanes is dealt at run time inside each group of 128, so the loads are not fully coalesced
