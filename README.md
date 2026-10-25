@@ -110,6 +110,7 @@ sums changed on purpose):
 | v1.6.0 | the new `bend-ml-tensor-gpu`: tensor-array's six products as one GPU call each; `tensor-array` 0.1.14.0: `matmul_precise`, long dot products summed in blocks of 1024 | the same bits as tensor-array on the GPU and on the CPU threads |
 | v1.6.1 | Bend 2.0.38: a compiled program's runtime options now go between `+RTS` and `-RTS` | GPT-2 per token unchanged (136.2 against 136.6 ms on one thread, 106.1 against 105.0 on 16); the binary 4 KB smaller |
 | v1.6.2 | the checks guard the runtime options: one outside `+RTS ... -RTS` fails them, test programs refuse arguments, and a probe checks that 1 and 16 threads use 1 and several cores | the packages and their bits unchanged |
+| v1.7.0 | Bend 2.0.39; `binary-read` 0.2.0.0: reads at 64-bit offsets, BF16 files and reads into a cell offset; `nat-lemmas` 0.1.2.0: `add4`, `mul_dist_l`; `tensor-array` 0.1.16.0 with `tensor-fork` and `tensor-gpu` 0.1.4.0 (0.1.14.0's code again, after 0.1.15.0's faster loop proved slower inside a whole program) | GPT-2 128 ms a token on one thread, 86 on 16 (138 and 106 with Bend 2.0.38); the products' bits those of 0.1.14.0 |
 
 Versions are numbered as in [`docs/VERSIONING.md`](docs/VERSIONING.md); each release has its notes on GitHub.
 
