@@ -27,20 +27,20 @@ type R is Type:
 type G is Type:
   G{a: Array<F32>, b: Array<F32>, c: Array<F32>}
 
-# A dot product with four partial sums. Each step adds its product to a0 and rotates the sums
-# (a1, a2, a3, a0), so each sum gets every fourth product and the processor can work on the next
-# addition before the last one has finished; at the end the sums are added in pairs. The order of
-# the additions is fixed, so the result is the same on every run and every thread count, but it is
-# not the order of a single running sum (NOTES.md, exp. 17).
-def dotr(k: Nat, +ia: U32, +ib: U32, +sa: U32, +sb: U32, a0: F32, a1: F32, a2: F32, a3: F32, ra: Array<F32> & F32, rb: Array<F32> & F32) -> R:
+# A dot product with eight partial sums (0.1.15.0; four before). Each step adds its product to a0 and rotates the sums
+# (a1, ..., a7, a0), so each sum gets every eighth product and the processor can work on the next additions before the
+# last one has finished; at the end the sums are added as a balanced tree of pairs. The order of the additions is fixed,
+# so the result is the same on every run and every thread count, but it is not the order of a single running sum
+# (NOTES.md, exp. 17 and 2026-10-25). The cells of 8 below keep exactly this order: sum q is lane q of every cell.
+def dotr(k: Nat, +ia: U32, +ib: U32, +sa: U32, +sb: U32, a0: F32, a1: F32, a2: F32, a3: F32, a4: F32, a5: F32, a6: F32, a7: F32, ra: Array<F32> & F32, rb: Array<F32> & F32) -> R:
   match k ra rb:
     case 0n Tuple{a, x} Tuple{b, y}:
-      R{a, b, ((a0 + a1 : F32) + (a2 + a3 : F32) : F32)}
+      R{a, b, (((a0 + a1 : F32) + (a2 + a3 : F32) : F32) + ((a4 + a5 : F32) + (a6 + a7 : F32) : F32) : F32)}
     case 1n+p Tuple{a, +x} Tuple{b, +y}:
-      dotr(p, (ia + sa : U32), (ib + sb : U32), sa, sb, a1, a2, a3, (a0 + (x * y : F32) : F32), Array.get(F32, a, (ia + sa : U32)), Array.get(F32, b, (ib + sb : U32)))
+      dotr(p, (ia + sa : U32), (ib + sb : U32), sa, sb, a1, a2, a3, a4, a5, a6, a7, (a0 + (x * y : F32) : F32), Array.get(F32, a, (ia + sa : U32)), Array.get(F32, b, (ib + sb : U32)))
 
 def dotg(k: Nat, +ia: U32, +ib: U32, +sa: U32, +sb: U32, acc: F32, ra: Array<F32> & F32, rb: Array<F32> & F32) -> R:
-  dotr(k, ia, ib, sa, sb, acc, 0.0, 0.0, 0.0, ra, rb)
+  dotr(k, ia, ib, sa, sb, acc, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, ra, rb)
 
 # writes one cell of C: c[idx] = x, or c[idx] = c[idx] + x when ac (an accumulating product, 0.1.10.0). x is computed
 # exactly as without ac and added once, so C + A·B has the bits of adding a separately computed A·B to C.
@@ -730,10 +730,12 @@ type MMulTN<-n: Nat, -k: Nat, -m: Nat> is Type:
 # ---------------------------------------------------------------------
 # gemm in tiles of 8 (0.1.8.0): for products with 2 or more rows, A's rows and B's columns are packed once into cells of
 # 8 F32 (a row of k numbers is ceil(k/8) cells, zeros after the last), so the inner loop reads 8 numbers per array
-# access instead of one. The order of the additions is that of `dotr`: product p of a dot goes to partial sum p mod 4,
-# in order, and the four sums are combined as dotr combines them after k steps (its rotation depends on k mod 4). The
-# padding adds +0 to a sum that starts at +0, which changes nothing, so the results are the same bits as the scalar
-# loop's. Products with one row (matrix · vector) keep the scalar loop: packing B would cost as much as the product.
+# access instead of one. The order of the additions is that of `dotr`: product p of a dot goes to partial sum p mod 8
+# (lane p mod 8 of its cell), in order, and the eight sums are combined as dotr combines them after k steps (its
+# rotation depends on k mod 8). The padding adds +0 to a sum that starts at +0, which changes nothing, so the results are
+# the same bits as the scalar loop's. Since 0.1.15.0 a pass over k computes two cells of C (columns j and j + 1), so each
+# A cell is read once for both: with one sum a lane, the two dots' sums are independent chains (23% fewer cycles over
+# SmolLM2's three products on one thread; NOTES.md, 2026-10-25). Products with one row (matrix · vector) keep the scalar loop: packing B would cost as much as the product.
 # ---------------------------------------------------------------------
 
 type T8 is Data:
@@ -813,39 +815,86 @@ def pk_pack(+cnt: Nat, +tk: Nat, +k: Nat, +lstep: U32, +st: U32, a: Array<F32>) 
   pk_lines(cnt, tk, U32.from_nat(tk), U32.from_nat(k), 0, 0, lstep, st, PK{a, Array.new(T8, cap_depth(Nat.mul(cnt, tk)), t8_zero())})
 
 # the dot of two lines of cells: tk cells from ia (in a) and ib (in b); ra, rb hold the arrays and the cells at ia, ib,
-# already read. Product q of a cell goes to sum q mod 4, the first four before the last four, as dotr adds them.
-def t8_dot(tk: Nat, +ia: U32, +ib: U32, s0: F32, s1: F32, s2: F32, s3: F32, ra: Array<T8> & T8, rb: Array<T8> & T8) -> TD:
+# already read. Product q of a cell goes to sum q, as dotr adds them.
+def t8_dot(tk: Nat, +ia: U32, +ib: U32, s0: F32, s1: F32, s2: F32, s3: F32, s4: F32, s5: F32, s6: F32, s7: F32, ra: Array<T8> & T8, rb: Array<T8> & T8) -> TD:
   match tk ra rb:
     case 0n Tuple{a, x} Tuple{b, y}:
-      TD{a, b, s0, s1, s2, s3}
+      TD{a, b, s0, s1, s2, s3, s4, s5, s6, s7}
     case 1n+p Tuple{a, T8{x0, x1, x2, x3, x4, x5, x6, x7}} Tuple{b, T8{y0, y1, y2, y3, y4, y5, y6, y7}}:
-      t8_dot(p, (ia + 1 : U32), (ib + 1 : U32), ((s0 + (x0 * y0 : F32) : F32) + (x4 * y4 : F32) : F32), ((s1 + (x1 * y1 : F32) : F32) + (x5 * y5 : F32) : F32), ((s2 + (x2 * y2 : F32) : F32) + (x6 * y6 : F32) : F32), ((s3 + (x3 * y3 : F32) : F32) + (x7 * y7 : F32) : F32), Array.get(T8, a, (ia + 1 : U32)), Array.get(T8, b, (ib + 1 : U32)))
+      t8_dot(p, (ia + 1 : U32), (ib + 1 : U32), (s0 + (x0 * y0 : F32) : F32), (s1 + (x1 * y1 : F32) : F32), (s2 + (x2 * y2 : F32) : F32), (s3 + (x3 * y3 : F32) : F32), (s4 + (x4 * y4 : F32) : F32), (s5 + (x5 * y5 : F32) : F32), (s6 + (x6 * y6 : F32) : F32), (s7 + (x7 * y7 : F32) : F32), Array.get(T8, a, (ia + 1 : U32)), Array.get(T8, b, (ib + 1 : U32)))
 
 type TD is Type:
-  TD{a: Array<T8>, b: Array<T8>, s0: F32, s1: F32, s2: F32, s3: F32}
+  TD{a: Array<T8>, b: Array<T8>, s0: F32, s1: F32, s2: F32, s3: F32, s4: F32, s5: F32, s6: F32, s7: F32}
 
-# dotr's final sum after k products: the sums sit rotated by k mod 4 when its loop ends
-def t8_comb(+rot: Nat, +s0: F32, +s1: F32, +s2: F32, +s3: F32) -> F32:
+# dotr's final sum after k products: the sums sit rotated by k mod 8 when its loop ends
+def t8_comb(+rot: Nat, +s0: F32, +s1: F32, +s2: F32, +s3: F32, +s4: F32, +s5: F32, +s6: F32, +s7: F32) -> F32:
   match rot:
     case 0n:
-      ((s0 + s1 : F32) + (s2 + s3 : F32) : F32)
+      (((s0 + s1 : F32) + (s2 + s3 : F32) : F32) + ((s4 + s5 : F32) + (s6 + s7 : F32) : F32) : F32)
     case 1n:
-      ((s1 + s2 : F32) + (s3 + s0 : F32) : F32)
+      (((s1 + s2 : F32) + (s3 + s4 : F32) : F32) + ((s5 + s6 : F32) + (s7 + s0 : F32) : F32) : F32)
     case 2n:
-      ((s2 + s3 : F32) + (s0 + s1 : F32) : F32)
+      (((s2 + s3 : F32) + (s4 + s5 : F32) : F32) + ((s6 + s7 : F32) + (s0 + s1 : F32) : F32) : F32)
+    case 3n:
+      (((s3 + s4 : F32) + (s5 + s6 : F32) : F32) + ((s7 + s0 : F32) + (s1 + s2 : F32) : F32) : F32)
+    case 4n:
+      (((s4 + s5 : F32) + (s6 + s7 : F32) : F32) + ((s0 + s1 : F32) + (s2 + s3 : F32) : F32) : F32)
+    case 5n:
+      (((s5 + s6 : F32) + (s7 + s0 : F32) : F32) + ((s1 + s2 : F32) + (s3 + s4 : F32) : F32) : F32)
+    case 6n:
+      (((s6 + s7 : F32) + (s0 + s1 : F32) : F32) + ((s2 + s3 : F32) + (s4 + s5 : F32) : F32) : F32)
     case _:
-      ((s3 + s0 : F32) + (s1 + s2 : F32) : F32)
+      (((s7 + s0 : F32) + (s1 + s2 : F32) : F32) + ((s3 + s4 : F32) + (s5 + s6 : F32) : F32) : F32)
 
 type TR is Type:
   TR{a: Array<T8>, b: Array<T8>, x: F32}
 
 def t8_fin(+rot: Nat, d: TD) -> TR:
   match d:
-    case TD{a, b, +s0, +s1, +s2, +s3}:
-      TR{a, b, t8_comb(rot, s0, s1, s2, s3)}
+    case TD{a, b, +s0, +s1, +s2, +s3, +s4, +s5, +s6, +s7}:
+      TR{a, b, t8_comb(rot, s0, s1, s2, s3, s4, s5, s6, s7)}
 
 def t8_cell(+tk: Nat, +tku: U32, +rot: Nat, +i: U32, +j: U32, a: Array<T8>, b: Array<T8>) -> TR:
-  t8_fin(rot, t8_dot(tk, (i * tku : U32), (j * tku : U32), 0.0, 0.0, 0.0, 0.0, Array.get(T8, a, (i * tku : U32)), Array.get(T8, b, (j * tku : U32))))
+  t8_fin(rot, t8_dot(tk, (i * tku : U32), (j * tku : U32), 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, Array.get(T8, a, (i * tku : U32)), Array.get(T8, b, (j * tku : U32))))
+
+# two cells of C at once: row i against columns j and j + 1 (cells ib and ic of b), each A cell read once for both; each
+# dot keeps t8_dot's order, so the two cells are t8_cell's bits
+type B2 is Type:
+  B2{b: Array<T8>, y: T8, z: T8}
+
+def b2_mk(y: T8, r: Array<T8> & T8) -> B2:
+  match r:
+    case Tuple{b, z}:
+      B2{b, y, z}
+
+def b2_get(+i2: U32, r: Array<T8> & T8) -> B2:
+  match r:
+    case Tuple{b, y}:
+      b2_mk(y, Array.get(T8, b, i2))
+
+def t8_get2(b: Array<T8>, +i1: U32, +i2: U32) -> B2:
+  b2_get(i2, Array.get(T8, b, i1))
+
+type TD2 is Type:
+  TD2{a: Array<T8>, b: Array<T8>, s0: F32, s1: F32, s2: F32, s3: F32, s4: F32, s5: F32, s6: F32, s7: F32, u0: F32, u1: F32, u2: F32, u3: F32, u4: F32, u5: F32, u6: F32, u7: F32}
+
+def t8_dot2(tk: Nat, +ia: U32, +ib: U32, +ic: U32, s0: F32, s1: F32, s2: F32, s3: F32, s4: F32, s5: F32, s6: F32, s7: F32, u0: F32, u1: F32, u2: F32, u3: F32, u4: F32, u5: F32, u6: F32, u7: F32, ra: Array<T8> & T8, rb: B2) -> TD2:
+  match tk ra rb:
+    case 0n Tuple{a, x} B2{b, y, z}:
+      TD2{a, b, s0, s1, s2, s3, s4, s5, s6, s7, u0, u1, u2, u3, u4, u5, u6, u7}
+    case 1n+p Tuple{a, T8{+x0, +x1, +x2, +x3, +x4, +x5, +x6, +x7}} B2{b, T8{y0, y1, y2, y3, y4, y5, y6, y7}, T8{z0, z1, z2, z3, z4, z5, z6, z7}}:
+      t8_dot2(p, (ia + 1 : U32), (ib + 1 : U32), (ic + 1 : U32), (s0 + (x0 * y0 : F32) : F32), (s1 + (x1 * y1 : F32) : F32), (s2 + (x2 * y2 : F32) : F32), (s3 + (x3 * y3 : F32) : F32), (s4 + (x4 * y4 : F32) : F32), (s5 + (x5 * y5 : F32) : F32), (s6 + (x6 * y6 : F32) : F32), (s7 + (x7 * y7 : F32) : F32), (u0 + (x0 * z0 : F32) : F32), (u1 + (x1 * z1 : F32) : F32), (u2 + (x2 * z2 : F32) : F32), (u3 + (x3 * z3 : F32) : F32), (u4 + (x4 * z4 : F32) : F32), (u5 + (x5 * z5 : F32) : F32), (u6 + (x6 * z6 : F32) : F32), (u7 + (x7 * z7 : F32) : F32), Array.get(T8, a, (ia + 1 : U32)), t8_get2(b, (ib + 1 : U32), (ic + 1 : U32)))
+
+type TR2 is Type:
+  TR2{a: Array<T8>, b: Array<T8>, x: F32, y: F32}
+
+def t8_fin2(+rot: Nat, d: TD2) -> TR2:
+  match d:
+    case TD2{a, b, +s0, +s1, +s2, +s3, +s4, +s5, +s6, +s7, +u0, +u1, +u2, +u3, +u4, +u5, +u6, +u7}:
+      TR2{a, b, t8_comb(rot, s0, s1, s2, s3, s4, s5, s6, s7), t8_comb(rot, u0, u1, u2, u3, u4, u5, u6, u7)}
+
+def t8_cell2(+tk: Nat, +tku: U32, +rot: Nat, +i: U32, +j: U32, a: Array<T8>, b: Array<T8>) -> TR2:
+  t8_fin2(rot, t8_dot2(tk, (i * tku : U32), (j * tku : U32), ((j + 1 : U32) * tku : U32), 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, Array.get(T8, a, (i * tku : U32)), t8_get2(b, (j * tku : U32), ((j + 1 : U32) * tku : U32))))
 
 type TG is Type:
   TG{a: Array<T8>, b: Array<T8>, c: Array<F32>}
@@ -855,12 +904,20 @@ def t8_set(+ac: Bool, +idx: U32, c: Array<F32>, r: TR) -> TG:
     case TR{a, b, +x}:
       TG{a, b, cwr(ac, idx, x, c)}
 
+def t8_set2(+ac: Bool, +idx: U32, c: Array<F32>, r: TR2) -> TG:
+  match r:
+    case TR2{a, b, +x, +y}:
+      TG{a, b, cwr(ac, (idx + 1 : U32), y, cwr(ac, idx, x, c))}
+
+# cells j.. of row i, two at a time, the last one alone when mleft is odd
 def t8_cols(+ac: Bool, mleft: Nat, +tk: Nat, +tku: U32, +rot: Nat, +i: U32, +j: U32, +cidx: U32, g: TG) -> TG:
   match mleft g:
     case 0n g:
       g
-    case 1n+p TG{a, b, c}:
-      t8_cols(ac, p, tk, tku, rot, i, (j + 1 : U32), (cidx + 1 : U32), t8_set(ac, cidx, c, t8_cell(tk, tku, rot, i, j, a, b)))
+    case 1n TG{a, b, c}:
+      t8_set(ac, cidx, c, t8_cell(tk, tku, rot, i, j, a, b))
+    case 2n+p TG{a, b, c}:
+      t8_cols(ac, p, tk, tku, rot, i, (j + 2 : U32), (cidx + 2 : U32), t8_set2(ac, cidx, c, t8_cell2(tk, tku, rot, i, j, a, b)))
 
 def t8_rows(+ac: Bool, nleft: Nat, +m: Nat, +tk: Nat, +tku: U32, +rot: Nat, +i: U32, +mu: U32, g: TG) -> TG:
   match nleft:
@@ -873,20 +930,32 @@ def t8_rows(+ac: Bool, nleft: Nat, +m: Nat, +tk: Nat, +tku: U32, +rot: Nat, +i: 
 type TL is Type:
   TL{a: Array<T8>, b: Array<T8>, out: List<&2, F32>}
 
-# cells j.. of row i, m - j of them; r is cell j, already computed
-def t8_lcols(mleft: Nat, +tk: Nat, +tku: U32, +rot: Nat, +i: U32, +j: U32, out: List<&2, F32>, r: TR) -> TL:
-  match mleft r:
-    case 0n TR{a, b, +x}:
+def tl_one(out: List<&2, F32>, r: TR) -> TL:
+  match r:
+    case TR{a, b, +x}:
       TL{a, b, x <> out}
-    case 1n+p TR{a, b, +x}:
-      t8_lcols(p, tk, tku, rot, i, (j + 1 : U32), x <> out, t8_cell(tk, tku, rot, i, (j + 1 : U32), a, b))
 
-def t8_lrows(nleft: Nat, +m: Nat, +tk: Nat, +tku: U32, +rot: Nat, +i: U32, l: TL) -> TL:
-  match nleft l:
+def tl_two(out: List<&2, F32>, r: TR2) -> TL:
+  match r:
+    case TR2{a, b, +x, +y}:
+      TL{a, b, y <> (x <> out)}
+
+# cells j.. of row i, mleft of them, onto out (newest first), two at a time as t8_cols
+def t8_lcols(mleft: Nat, +tk: Nat, +tku: U32, +rot: Nat, +i: U32, +j: U32, l: TL) -> TL:
+  match mleft l:
     case 0n l:
       l
-    case 1n+p TL{a, b, out}:
-      t8_lrows(p, m, tk, tku, rot, (i + 1 : U32), t8_lcols(Nat.sub(m, 1n), tk, tku, rot, i, 0, out, t8_cell(tk, tku, rot, i, 0, a, b)))
+    case 1n TL{a, b, out}:
+      tl_one(out, t8_cell(tk, tku, rot, i, j, a, b))
+    case 2n+p TL{a, b, out}:
+      t8_lcols(p, tk, tku, rot, i, (j + 2 : U32), tl_two(out, t8_cell2(tk, tku, rot, i, j, a, b)))
+
+def t8_lrows(nleft: Nat, +m: Nat, +tk: Nat, +tku: U32, +rot: Nat, +i: U32, l: TL) -> TL:
+  match nleft:
+    case 0n:
+      l
+    case 1n+p:
+      t8_lrows(p, m, tk, tku, rot, (i + 1 : U32), t8_lcols(m, tk, tku, rot, i, 0, l))
 
 def t8_lfin(l: TL) -> List<&2, F32>:
   match l:
@@ -1021,7 +1090,7 @@ def gemm_t8b(+ac: Bool, d: Nat, +n: Nat, +m: Nat, +k: Nat, +tk: Nat, +tku: U32, 
 # C (n x m) = A · B (or C + A · B when ac) in cells of 8, sequential (d = 0) or with 2^d blocks of rows in parallel; A
 # and B come back intact
 def gemm_t8_ac(+ac: Bool, d: Nat, +n: Nat, +m: Nat, +k: Nat, +arow: U32, +sa: U32, +sb: U32, +bcol: U32, a: Array<F32>, b: Array<F32>, c: Array<F32>) -> G:
-  gemm_t8b(ac, d, n, m, k, Nat.div(Nat.add(k, 7n), 8n), U32.from_nat(Nat.div(Nat.add(k, 7n), 8n)), Nat.mod(k, 4n), arow, sa, sb, bcol, a, b, c)
+  gemm_t8b(ac, d, n, m, k, Nat.div(Nat.add(k, 7n), 8n), U32.from_nat(Nat.div(Nat.add(k, 7n), 8n)), Nat.mod(k, 8n), arow, sa, sb, bcol, a, b, c)
 
 def gemm_t8(d: Nat, +n: Nat, +m: Nat, +k: Nat, +arow: U32, +sa: U32, +sb: U32, +bcol: U32, a: Array<F32>, b: Array<F32>, c: Array<F32>) -> G:
   gemm_t8_ac(False{}, d, n, m, k, arow, sa, sb, bcol, a, b, c)
