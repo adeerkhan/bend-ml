@@ -1,5 +1,5 @@
 # Mat.matmul_precise (0.1.14.0): every cell of a product with k > 1024 equals its dot summed as blocks of 1024 (the last
-# one 1..1024), each block computed by dotr (the four partial sums, unchanged since 0.1.8.0) and the block totals added
+# one 1..1024), each block computed by dotr (its partial sums, eight since 0.1.15.0) and the block totals added
 # one after another from the first. The reference below builds each cell that way from dotr itself, independently of
 # matmul_precise's slices; they are compared on one row (the scalar path) and on several (the cells of 8), at par 0 and
 # 4, for k around one, two and many blocks (up to 49,152, SmolLM2's vocabulary); for k <= 1024 matmul_precise must be
@@ -57,7 +57,7 @@ def rblocks(nb: Nat, +bi: U32, +k: U32, +ia0: U32, +ib0: U32, +sa: U32, +sb: U32
     case 1n++q:
       +ia = (ia0 + ((bi * 1024 : U32) * sa : U32) : U32)
       +ib = (ib0 + ((bi * 1024 : U32) * sb : U32) : U32)
-      r_then(TA.dotr(blen(bi, k), ia, ib, sa, sb, 0.0, 0.0, 0.0, 0.0, Array.get(F32, a, ia), Array.get(F32, b, ib)), +x => a2 => b2 => rblocks(q, (bi + 1 : U32), k, ia0, ib0, sa, sb, False{}, comb(first, acc, x), a2, b2))
+      r_then(TA.dotr(blen(bi, k), ia, ib, sa, sb, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, Array.get(F32, a, ia), Array.get(F32, b, ib)), +x => a2 => b2 => rblocks(q, (bi + 1 : U32), k, ia0, ib0, sa, sb, False{}, comb(first, acc, x), a2, b2))
 
 type RC is Type:
   RC{a: Array<F32>, b: Array<F32>, c: Array<F32>}
