@@ -8,7 +8,7 @@ Tensors in Bend 2 over a flat `Array<F32>`, **with the shape in the type**: the 
 
 ```python
 import Base
-import bend-ml-tensor-array@0.1.14.0/main.bend as TA
+import bend-ml-tensor-array@0.1.15.0/main.bend as TA
 
 def prod(a: TA.Mat<100n, 784n>, w: TA.Mat<784n, 128n>) -> TA.MMul<100n, 784n, 128n>:
   TA.Mat.matmul(100n, 784n, 128n, 3n, a, w)   # 3n = 2^3 = 8 parallel blocks
@@ -118,6 +118,12 @@ With parallel blocks, the large MNIST product (100×784·784×128) gains ~2x on 
 
 ## Versions
 
+- `0.1.15.0`: the dot product inside every product keeps eight partial sums instead of four (product p into sum p mod 8,
+  lane p mod 8 of a cell of 8), and a pass over k computes two cells of C, so each cell of A is read once for both. On
+  one thread, over SmolLM2-135M's three linear-layer products, 23% fewer cycles (idle machine, 2026-10-25); against a
+  float64 dot the error is about 25% lower at k = 256 to 1536 (a simulation of both orders). Every product's last bits
+  move: they are no longer those of 0.1.14.0. The scalar loop (one-row products, `Bands.matvec`) keeps the same order,
+  so it still equals the cells of 8 bit for bit (`tests/t8.bend`).
 - `0.1.14.0`: `Mat.matmul_precise`, opt-in: `Mat.matmul` with k summed in blocks of 1024 (each block's dot with the
   usual four partial sums, the block totals added in order), for long dots. SmolLM2's head product (k = 49,152) as four
   running sums of 12,288 terms lost the small ones: BendTorch's gradients were 1.8x further from float64 than PyTorch's
