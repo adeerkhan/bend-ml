@@ -1,23 +1,21 @@
 """Writes tensor-gpu/main.bend, bend-ml-tensor-gpu: tensor-array's six products on the GPU with tensor-array's bits.
 
-  python scripts/gen_tensor_gpu.py [TM TN] [out]      # tile of C a leaf computes (default 4 2)
+  python scripts/gen_tensor_gpu.py [TM TN] [out]      # tile of C a leaf computes (default 4 4)
 
-Each leaf of one bang computes a TM x TN tile of C with eight partial sums a cell (tensor-array 0.1.15.0; four before),
-in tensor-array's order: product p of a dot goes to sum p mod 8, in increasing p, each sum starting at +0.0, and the
-eight are combined by TA.t8_comb with rot = k mod 8 (tensor-array's dotr and t8_dot). The loop takes eight steps of k a
-turn; the last turn's steps past k add +0.0, which leaves a sum unchanged (a sum that starts at +0.0 is never -0.0). An
-accumulating product adds the cell to C once with TA.cwr. So every cell has the bits tensor-array computes, whatever the
-tile or the number of leaves. The code is generated because a tile of TM x TN cells carries 8 * TM * TN sums through
-the loop.
+Each leaf of one bang computes a TM x TN tile of C with four partial sums a cell, in tensor-array's order: product p of
+a dot goes to sum p mod 4, in increasing p, each sum starting at +0.0, and the four are combined by TA.t8_comb with
+rot = k mod 4 (tensor-array's dotr and t8_dot). The loop takes four steps of k a turn; the last turn's steps past k add
++0.0, which leaves a sum unchanged (a sum that starts at +0.0 is never -0.0). An accumulating product adds the cell to C
+once with TA.cwr. So every cell has the bits tensor-array computes, whatever the tile or the number of leaves.
+The code is generated because a tile of TM x TN cells carries 4 * TM * TN sums through the loop.
 """
 import sys
 
-TM, TN = (int(sys.argv[1]), int(sys.argv[2])) if len(sys.argv) > 2 else (4, 2)
+TM, TN = (int(sys.argv[1]), int(sys.argv[2])) if len(sys.argv) > 2 else (4, 4)
 OUT = sys.argv[3] if len(sys.argv) > 3 else "tensor-gpu/main.bend"
-NS = 8  # partial sums a cell, tensor-array's dotr
-G = NS  # steps of k a turn: step q of a turn goes to sum q
+G = 4  # steps of k a turn
 cells = [(r, c) for r in range(TM) for c in range(TN)]
-S = [f"s{q}_{r}_{c}" for (r, c) in cells for q in range(NS)]  # sums, cell-major
+S = [f"s{q}_{r}_{c}" for (r, c) in cells for q in range(4)]  # sums, cell-major
 X = [f"x{g}_{r}" for g in range(G) for r in range(TM)]  # A values: step g, row r
 Y = [f"y{g}_{c}" for g in range(G) for c in range(TN)]  # B values: step g, column c
 V = X + Y
@@ -36,7 +34,7 @@ p = o.append
 p(f"""# bend-ml-tensor-gpu: tensor-array's products on the GPU, with tensor-array's bits.
 #
 #   import ../tensor-array/main.bend as TA
-#   import bend-ml-tensor-gpu@0.1.3.0/main.bend as TG
+#   import bend-ml-tensor-gpu@0.1.2.1/main.bend as TG
 #   TG.matmul(n, k, m, par, a, b)      # the same arguments, result type and bits as TA.Mat.matmul
 #
 # The six products (matmul, matmul_nt, matmul_tn and their accumulating forms) take tensor-array's Mat values and return
@@ -45,9 +43,9 @@ p(f"""# bend-ml-tensor-gpu: tensor-array's products on the GPU, with tensor-arra
 # handles to one block, no copy), as upstream's one-block pattern does (bendlang/bend tests/run/stencil3d.bend). On a
 # machine without a GPU, or with `--gpu off`, the same bang runs on the CPU threads.
 #
-# The bits: a cell of C is computed in tensor-array's order. Product p of a dot goes to partial sum p mod 8, in
-# increasing p, each sum starting at +0.0, and the eight sums are combined by TA.t8_comb with rot = k mod 8, as
-# tensor-array's dotr and t8_dot do; an accumulating product adds the cell to C once with TA.cwr. The loop takes eight
+# The bits: a cell of C is computed in tensor-array's order. Product p of a dot goes to partial sum p mod 4, in
+# increasing p, each sum starting at +0.0, and the four sums are combined by TA.t8_comb with rot = k mod 4, as
+# tensor-array's dotr and t8_dot do; an accumulating product adds the cell to C once with TA.cwr. The loop takes four
 # steps of k a turn; the steps past k in the last turn add +0.0, which leaves a sum unchanged (a sum that starts at +0.0
 # is never -0.0). Bend builds the device code with --fmad=false, so no multiply-add is fused. tests/bits.bend checks the
 # bits against tensor-array on many shapes, on the GPU and the CPU.
@@ -57,7 +55,7 @@ p(f"""# bend-ml-tensor-gpu: tensor-array's products on the GPU, with tensor-arra
 # writes only its own tile of C, or never writes A or B; the tiles are disjoint by construction (leaf t writes tile t).
 # All of it is Bend: no foreign code. Written by bend-ml's scripts/gen_tensor_gpu.py ({TM} x {TN} tiles).
 import Base
-import bend-ml-tensor-array@0.1.15.0/main.bend as TA
+import bend-ml-tensor-array@0.1.14.0/main.bend as TA
 
 # the sizes and strides of one product: C[i][j] = sum_p A[oa + i*arow + p*sa] * B[ob + p*sb + j*bcol], n x m, k steps
 # (oa, ob: 0 except for matmul_precise's blocks)
@@ -70,7 +68,7 @@ def pk(ok: Bool, +x: F32) -> F32:
     case True{{}}: x
     case False{{}}: 0.0
 
-# the values of one turn: A's {TM} rows and B's {TN} columns at {G} consecutive steps, read through the arrays in order
+# the values of one turn: A's {TM} rows and B's {TN} columns at four consecutive steps, read through the arrays in order
 type GR is Type:
   GR{{a: Array<F32>, b: Array<F32>, {j(v + ': F32' for v in V)}}}
 
@@ -109,7 +107,7 @@ p(f"""# the turn whose A values start at ia and B values at ib
 def turn(+ia: U32, +ib: U32, +arow: U32, +sa: U32, +sb: U32, +bcol: U32, a: Array<F32>, b: Array<F32>) -> GR:
   gr_0(ia, ib, arow, sa, sb, bcol, Array.get(F32, a, ia), b)
 
-# the tile's cells after the {NS} sums are combined, row by row
+# the tile's cells after the four sums are combined, row by row
 type T is Type:
   T{{a: Array<F32>, b: Array<F32>, {j(f'c{r}_{c}: F32' for (r, c) in cells)}}}
 
@@ -119,7 +117,7 @@ type T is Type:
 def upd(guard):
     out = []
     for (r, c) in cells:
-        for q in range(NS):
+        for q in range(4):
             prod = f"(x{q}_{r} * y{q}_{c} : F32)"
             if guard:
                 prod = f"pk(U32.is_lt({q}, rem), {prod})"
@@ -131,17 +129,17 @@ sp = j("+" + s + ": F32" for s in S)
 vp = j("+" + v for v in V)
 fin = []
 for (r, c) in cells:
-    a = upd(True)[(r * TN + c) * NS: (r * TN + c) * NS + NS]
+    a = upd(True)[(r * TN + c) * 4: (r * TN + c) * 4 + 4]
     fin.append(f"TA.t8_comb(rot, {j(a)})")
 p(f"""# kg more full turns; g holds the current turn's values. The last call (kg = 0) adds the turn that holds the steps
-# past the last full turn (rem = k mod {G} of them), counting only those, and combines the sums.
+# past the last full turn (rem = k mod 4 of them), counting only those, and combines the sums.
 @unsafe
 def mm(kg: Nat, +ia: U32, +ib: U32, +arow: U32, +sa: U32, +sb: U32, +bcol: U32, +rem: U32, +rot: Nat, {sp}, g: GR) -> T:
   match kg g:
     case 0n GR{{a, b, {vp}}}:
       T{{a, b, {j(fin)}}}
     case 1n+q GR{{a, b, {vp}}}:
-      mm(q, (ia + (sa * {G} : U32) : U32), (ib + (sb * {G} : U32) : U32), arow, sa, sb, bcol, rem, rot, {j(upd(False))}, turn((ia + (sa * {G} : U32) : U32), (ib + (sb * {G} : U32) : U32), arow, sa, sb, bcol, a, b))
+      mm(q, (ia + (sa * 4 : U32) : U32), (ib + (sb * 4 : U32) : U32), arow, sa, sb, bcol, rem, rot, {j(upd(False))}, turn((ia + (sa * 4 : U32) : U32), (ib + (sb * 4 : U32) : U32), arow, sa, sb, bcol, a, b))
 
 # writes cell (i, j) of C when it is inside n x m
 def wr(ok: Bool, +ac: Bool, +idx: U32, +x: F32, c: Array<F32>) -> Array<F32>:
@@ -214,7 +212,7 @@ def run_e(+e: E, +tiles: U32, +a: Array<F32>, +b: Array<F32>, c: Array<F32>) -> 
 
 # the product's sizes and strides
 def e_ofo(+ac: Bool, +n: Nat, +m: Nat, +k: Nat, +arow: U32, +sa: U32, +sb: U32, +bcol: U32, +oa: U32, +ob: U32) -> E:
-  E{{U32.from_nat(n), U32.from_nat(m), U32.from_nat(k), U32.from_nat(Nat.div(Nat.add(m, {TN - 1}n), {TN}n)), U32.from_nat(Nat.mul(Nat.div(Nat.add(n, {TM - 1}n), {TM}n), Nat.div(Nat.add(m, {TN - 1}n), {TN}n))), arow, sa, sb, bcol, Nat.div(k, {G}n), Nat.mod(k, {G}n), U32.from_nat(Nat.mod(k, {G}n)), ac, oa, ob}}
+  E{{U32.from_nat(n), U32.from_nat(m), U32.from_nat(k), U32.from_nat(Nat.div(Nat.add(m, {TN - 1}n), {TN}n)), U32.from_nat(Nat.mul(Nat.div(Nat.add(n, {TM - 1}n), {TM}n), Nat.div(Nat.add(m, {TN - 1}n), {TN}n))), arow, sa, sb, bcol, Nat.div(k, 4n), Nat.mod(k, 4n), U32.from_nat(Nat.mod(k, 4n)), ac, oa, ob}}
 
 def e_of(+ac: Bool, +n: Nat, +m: Nat, +k: Nat, +arow: U32, +sa: U32, +sb: U32, +bcol: U32) -> E:
   e_ofo(ac, n, m, k, arow, sa, sb, bcol, 0, 0)
