@@ -1462,3 +1462,20 @@ through pull request #14 (CI green).
 - Lesson: a loop's speed measured in a probe is not its speed inside the program that uses it (clang's choices depend
   on the code around it; `memory/compiler-schedule-noise.md`). Time a change to a shared kernel in its biggest user
   before publishing it.
+
+## tensor-array: Mat.softmax_ce over the array (2026-10-26, not published)
+
+- MetalBend measured `Mat.softmax_ce` walking each row as a list five times, and the same operations over the array
+  3.4x faster. `cea_rows` now does them in place with tail loops, in the list version's order (the max from the first
+  cell, exp(x - max) summed from +0.0, p = e / s, the loss term read before the row is overwritten, (p - onehot) / n),
+  and `Mat.softmax_ce` uses it. `ce_rows` stays as the reference.
+- Bits: `tensor-array/tests/ce_array.bend` compares both versions word for word on 2x3, 100x10, 7 rows of 49,152, 1x1,
+  and 5x10 with 3 and with 7 labels (one row per label, as before), logits with -0, inf, NaN and a subnormal, labels
+  past the row: all 0. A mutant that shifts the one-hot by a column is caught. In `make check`.
+- Cost, user-mode counts on CPU 3 (the same output): 64 rows of 49,152 take 417 M instructions and 150 M cycles against
+  1,260 M and 455 M (3.0x, the fill included in both); the MNIST demo's 50 batches (rows of 10) take 8,598 M
+  instructions against 8,613 M, the same `train_loss` and accuracy. So it matters for wide rows, not for MNIST.
+- Not done: the rows in parallel. tensor-array shares no array (no `Array.fork`), so each node of a fork tree would
+  clone the whole matrix, and on a loop bound by memory the copies cost what the threads give back. BendTorch, the
+  user with wide rows, has its own cross-entropy over arrays.
+- To publish as the next tensor-array version (Renan's call); the MNIST demo would move to it with no change in bits.
