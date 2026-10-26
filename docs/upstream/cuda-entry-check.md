@@ -77,7 +77,7 @@ The 17 runtime benches in PAR-GPU mode (`+RTS --gpu <the gate's MEMORY size>`), 
 | tree-matmul | 536 | 535 | 1.00x |
 | tree-radix | 755 | 757 | 1.00x |
 
-Geometric mean 1.00x: the benches neither gain nor lose. Most of their bangs run more than one round, so they keep #1447's chaining after the first.
+Geometric mean 1.00x: the benches neither gain nor lose.
 
 ## Tests
 
