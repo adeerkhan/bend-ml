@@ -2,9 +2,9 @@
 # rectangular matrices, with -0, infinities, NaN and a subnormal among the values. Prints the
 # number of cases that differ from their list, which must be 0.
 #
-# This is the value half of the conversion guarantee. The length half is not a law yet: Bend's
-# checker does not follow Array.set/Array.get on a neutral array, so a content law needs an
-# Array.set/get lemma that Base does not have. The seam is tested here instead.
+# This is the value half of the conversion guarantee. The count is the law `to_list_len` in
+# main.bend; the values are tested here because Bend's checker does not follow Array.set/Array.get
+# on a neutral array, so a content law needs an Array.set/get lemma that Base does not have.
 import Base
 import ../main.bend as TA
 
