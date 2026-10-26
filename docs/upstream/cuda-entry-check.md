@@ -1,21 +1,22 @@
-# Draft PR for bendlang/bend: CUDA picks the round after a sync on the host, skipping #1447's entry check
+# Draft issue and PR for bendlang/bend: #1447's CUDA entry check costs ~3%; the round after a sync picked on the host
 
 Status: draft (2026-10-25), for Renan to open. Asked on the Bend Discord first; lorenzo (2026-10-25): "either is fine,
 you can implement it and we drift the direction if needed". The branch is `cuda-entry-check` in `~/Repos/Bend2/bend`
-(one commit, 6dcc1878, on main 295e9965), not pushed. Duplicates checked on 2026-10-25 (searched "1447", "command
+(one commit, 6dcc1878, on main 295e9965), pushed to nuxyel/bend. Duplicates checked on 2026-10-25 (searched "1447", "command
 buffers", "rounds CUDA", "CUDA slower 2.0.38"): none. Evidence: bend2-lab `experiments/2026-10-25-cuda-rounds/`
 (private; the numbers below are all the PR needs). Shaped by the maintainers' reviews: Metal stays as it is, the PR
 goes in over the cap rather than trimming tokens (#1820), and it edits no CHANGELOG, GUIDE or gates.
 
 The tables below were rerun on an idle machine on 2026-10-25.
 
-The text below the line is the PR.
+Open the issue first, then the PR with its number in the `Fixes` line (replace `#ISSUE`), then
+comment on the issue pointing at the PR. The two texts are below.
 
 ---
 
-**Title:** CUDA: the round after a sync is picked on the host, so its dispatches skip the device's frontier check
+## Issue
 
-## Why
+**Title:** CUDA: #1447's entry check in `bend_dev` makes a small training loop ~3% slower (bisected)
 
 Since 2.0.38 a GPU training loop of mine is about 3% slower on CUDA. I bisected it to a97a7c46 (#1447, "GPU bangs chain their rounds on the device"). #1447 notes that its CUDA path wasn't compiled or tested, so here is what it does on a CUDA machine.
 
@@ -37,6 +38,22 @@ To find the part that costs, I edited 2.0.38's emitted C and built it with the c
 
 So the rounds queued past the end of the work and the empty dispatches don't cost anything measurable. The entry check does, even in dispatches that have work. The kernel uses 255 registers with and without it, so it isn't occupancy. I don't know the mechanism. Under nsys the kernels take the same total time with and without the check, and the host's CPU time is the same too, so the gap shows only in an untraced run. Unified-memory page faults are the same in both.
 
+I have a fix that keeps #1447's chaining (the first round after each sync picked on the host, without the check) and brings the time back; I'll open it as a PR and link it here.
+
+## Comment on the issue, after the PR is open
+
+The fix is in #PR: the first round after each sync launches only the dispatches the frontier the host read needs, without the check, and the rounds chained after it keep it. On this loop main takes 16.72 s and the PR 16.27 s; the 17 runtime benches on the GPU are unchanged (geometric mean 1.00x).
+
+---
+
+## PR
+
+**Title:** CUDA: the round after a sync is picked on the host, so its dispatches skip the device's frontier check
+
+Fixes #ISSUE
+
+Since 2.0.38 a GPU training loop of mine is about 3% slower on CUDA, and the cost is #1447's entry check in `bend_dev` (#ISSUE has the bisection and the variants that isolate it). This keeps #1447's device-chained rounds and takes the check off the round the host can pick itself.
+
 ## Change
 
 `bend2/comp.ts` only.
@@ -48,7 +65,7 @@ So the rounds queued past the end of the work and the empty dispatches don't cos
 
 ## Measurements
 
-The training loop above, current code, main (295e9965) against this branch, 5 alternated rounds on an idle machine, the same output bits:
+The training loop from #ISSUE, current code, main (295e9965) against this branch, 5 alternated rounds on an idle machine, the same output bits:
 
 | | main | this PR |
 |---|---|---|
