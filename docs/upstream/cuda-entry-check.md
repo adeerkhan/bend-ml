@@ -7,7 +7,7 @@ buffers", "rounds CUDA", "CUDA slower 2.0.38"): none. Evidence: bend2-lab `exper
 (private; the numbers below are all the PR needs). Shaped by the maintainers' reviews: Metal stays as it is, the PR
 goes in over the cap rather than trimming tokens (#1820), and it edits no CHANGELOG, GUIDE or gates.
 
-Before opening: rerun the bench table on an idle machine (the one below ran at load ~2).
+The tables below were rerun on an idle machine on 2026-10-25.
 
 The text below the line is the PR.
 
@@ -48,38 +48,36 @@ So the rounds queued past the end of the work and the empty dispatches don't cos
 
 ## Measurements
 
-The training loop above, current code, main (295e9965) against this branch, 5 alternated rounds, the same output bits:
+The training loop above, current code, main (295e9965) against this branch, 5 alternated rounds on an idle machine, the same output bits:
 
 | | main | this PR |
 |---|---|---|
-| train 200, median | 16.74 s | 16.33 s |
-| range | 16.73-17.05 s | 16.21-16.65 s |
+| train 200, median | 16.72 s | 16.27 s |
+| range | 16.60-16.87 s | 16.15-16.31 s |
 
-The 17 runtime benches in PAR-GPU mode (`+RTS --gpu <the gate's MEMORY size>`), built by each compiler with `CUDA_HOME` set, 3 alternated rounds, medians in ms, every output identical between the two:
-
-<!-- BENCH TABLE: rerun idle before posting -->
+The 17 runtime benches in PAR-GPU mode (`+RTS --gpu <the gate's MEMORY size>`), built by each compiler with `CUDA_HOME` set, 5 alternated rounds on an idle machine, medians in ms, every output identical between the two:
 
 | bench | main | this PR | ratio |
 |---|---:|---:|---:|
-| bfs | 595 | 570 | 0.96x |
-| editdist | 765 | 769 | 1.01x |
-| gameoflife | 219 | 232 | 1.06x |
-| hashmap | 787 | 784 | 1.00x |
-| histogram | 1026 | 1015 | 0.99x |
-| kmeans | 490 | 492 | 1.00x |
-| lexer | 1320 | 1342 | 1.02x |
-| mandelbrot | 216 | 200 | 0.93x |
-| merkle | 219 | 204 | 0.93x |
-| nbody | 189 | 198 | 1.05x |
-| queens | 1615 | 1591 | 0.99x |
-| raytrace | 978 | 964 | 0.99x |
-| symreg | 515 | 517 | 1.00x |
-| terrain | 588 | 574 | 0.98x |
-| tree-bitonic | 1874 | 1872 | 1.00x |
-| tree-matmul | 548 | 528 | 0.96x |
-| tree-radix | 761 | 755 | 0.99x |
+| bfs | 563 | 564 | 1.00x |
+| editdist | 768 | 773 | 1.01x |
+| gameoflife | 215 | 210 | 0.98x |
+| hashmap | 775 | 780 | 1.01x |
+| histogram | 1022 | 1020 | 1.00x |
+| kmeans | 493 | 499 | 1.01x |
+| lexer | 1334 | 1327 | 0.99x |
+| mandelbrot | 200 | 201 | 1.00x |
+| merkle | 209 | 209 | 1.00x |
+| nbody | 196 | 195 | 0.99x |
+| queens | 1584 | 1622 | 1.02x |
+| raytrace | 954 | 965 | 1.01x |
+| symreg | 503 | 504 | 1.00x |
+| terrain | 572 | 568 | 0.99x |
+| tree-bitonic | 1851 | 1847 | 1.00x |
+| tree-matmul | 536 | 535 | 1.00x |
+| tree-radix | 755 | 757 | 1.00x |
 
-Geometric mean 0.99x. The benches under 250 ms move by up to 7% either way between sessions, for both builds.
+Geometric mean 1.00x: the benches neither gain nor lose. Most of their bangs run more than one round, so they keep #1447's chaining after the first.
 
 ## Tests
 
