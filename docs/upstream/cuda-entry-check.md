@@ -1,6 +1,7 @@
 # Draft issue and PR for bendlang/bend: #1447's CUDA entry check costs ~3%; the round after a sync picked on the host
 
-Status: draft (2026-10-25), for Renan to open. Asked on the Bend Discord first; lorenzo (2026-10-25): "either is fine,
+Status: posted 2026-10-25 with Renan's go: issue bendlang/bend#1854, PR #1855 (Fixes #1854), comment
+issuecomment-6407385946. Asked on the Bend Discord first; lorenzo (2026-10-25): "either is fine,
 you can implement it and we drift the direction if needed". The branch is `cuda-entry-check` in `~/Repos/Bend2/bend`
 (one commit, 6dcc1878, on main 295e9965), pushed to nuxyel/bend. Duplicates checked on 2026-10-25 (searched "1447", "command
 buffers", "rounds CUDA", "CUDA slower 2.0.38"): none. Evidence: bend2-lab `experiments/2026-10-25-cuda-rounds/`
