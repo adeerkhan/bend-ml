@@ -8,7 +8,7 @@ Tensors in Bend 2 over a flat `Array<F32>`, **with the shape in the type**: the 
 
 ```python
 import Base
-import bend-ml-tensor-array@0.1.17.0/main.bend as TA
+import bend-ml-tensor-array@0.1.18.0/main.bend as TA
 
 def prod(a: TA.Mat<100n, 784n>, w: TA.Mat<784n, 128n>) -> TA.MMul<100n, 784n, 128n>:
   TA.Mat.matmul(100n, 784n, 128n, 3n, a, w)   # 3n = 2^3 = 8 parallel blocks
@@ -120,6 +120,11 @@ With parallel blocks, the large MNIST product (100×784·784×128) gains ~2x on 
 
 ## Versions
 
+- `0.1.18.0`: the law `to_list_len` (`Mat.to_list` reads exactly `r*c` numbers) and a fix: `Mat.to_list` of a matrix
+  with no numbers (0 rows or 0 columns) now gives `Nil`, where it gave a one-element list before. `tests/roundtrip.bend`
+  checks `Mat.of_list` then `Mat.to_list` on empty, row, column and rectangular matrices, word for word (the numbers are
+  tested, not proved). Contributed by @adeerkhan (bend-ml #22). Every other def is 0.1.17.0's, with its bits. `tensor-gpu` 0.1.5.0
+  imports 0.1.18.0; `tensor-fork` 0.1.4.0 still imports 0.1.16.0, so a program that uses it stays on 0.1.16.0.
 - `0.1.17.0`: `Mat.softmax_ce` walks its rows over the array in place instead of as lists, with the list version's
   bits (checked word for word on six shapes, with -0, inf, NaN and subnormal logits). 64 rows of 49,152 take 3.0x fewer
   instructions and cycles; the MNIST demo's rows of 10 gain nothing measurable. `tensor-fork` and `tensor-gpu` 0.1.4.0
