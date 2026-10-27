@@ -1514,6 +1514,17 @@ through pull request #14 (CI green).
   256 x 3072, whole programs, three runs each): the host list 1.98-1.99 s on one thread, about 20 ms a fill;
   `bench/fill_gauss.bend` 0.75-0.76 s on one thread, 0.60-0.65 s on 16 and 0.68-0.70 s on the RTX 4050 after a first
   run of 2.75 s (the kernel's compile), so 6-7.5 ms a fill on every lane, the same checksum on all of them.
+- Offset fills, asked on #23 by adeerkhan so a batch can be sliced: `fill_uniform_at(s, i0, n, c)`,
+  `fill_gauss_at(s, i0, n, c)`, `uniform_mat_at(s, i0, r, m)` and `gauss_mat_at(s, i0, r, m)` make cells
+  i0 .. i0 + n - 1 of counter s, output cell k the cell function at i0 + k (i0 a `U32`, wrapping mod 2^32). His
+  condition was that the Gaussians' pairs stay global, not per slice: a lane makes the global pair i0 / 2 + j and
+  writes its halves at 2j - (i0 mod 2) and the next cell when they lie in the slice, so an odd i0 starts with a sine
+  half. The plain fills are now the case i0 = 0, with the same words (the 13 lines of `fill.bend` and the twin's 8,192
+  words unchanged). Four more defs outside the proofs (62). `fill.bend` adds 12 lines: 8 offset fills against their
+  cell functions (odd and even i0 and n, n = 1 at an odd i0, an i0 near 2^32 that wraps), 3 slices against a full
+  fill, and 16 rows of a `gauss_mat_at` against the 256 x 3072 `gauss_mat`, the same on 1 and 16 threads, the GPU and
+  the JS lane; with the parity dropped from the leaf the 8 Gaussian slices at an odd i0 differ. The twin adds two
+  odd-i0 slices (4,095 cells that wrap, 777 cells): 13,064 words, 0 differ.
 - 0.1.5.0 imports tensor-array 0.1.17.0 instead of 0.1.16.0: Bend treats two versions' `Mat` as different types, so
   a program on 0.1.17.0 (the version the README now lists) could not pass its matrices to a tensor-gpu on 0.1.16.0.
   0.1.17.0 only adds the cross-entropy over the array; the products are 0.1.16.0's, and the bit tests pass unchanged on
