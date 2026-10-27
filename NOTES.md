@@ -1170,7 +1170,7 @@ stays as it is.
 
 ## The CLI's table check without `BPE.wf` (2026-10-17)
 
-From bend-lint's `eager_branch` on `has`/`wf.go`, measured at GPT-2's 50,000 merges (bend2-lab
+From bend-lint's `eager_branch` on `has`/`wf.go`, measured at GPT-2's 50,000 merges (my private notes,
 `experiments/2026-10-17-lint-scale`): `bpe/cli.bend` checked every merges table it read with `ids_ok` and `BPE.wf`,
 and `wf` walks the rules before each rule, O(n²): 4,395 ms per `encode` of one line, against 55 ms without it (10,000
 merges: 212 → 14 ms), the same output. `wf` holds by construction there, since `rules.go` numbers the rules 0, 1,
@@ -1422,7 +1422,7 @@ through pull request #14 (CI green).
 
 - **Why.** In BendTorch's SmolLM2-135M step the products are 76-86% of one thread's time. `perf annotate` of `t8_dot`:
   clang vectorizes it with SSE, about 20 instructions and 3.9 cycles a cell of 8, and the loop waits on its four sums'
-  chain (two dependent additions a cell). Six variants were tried on SmolLM2's three linear-layer products (bend2-lab).
+  chain (two dependent additions a cell). Six variants were tried on SmolLM2's three linear-layer products (my private notes).
   Eight sums alone gave 7.6% fewer cycles; cells of 16 cut instructions but not cycles on the short dots; two columns of
   C a pass with today's order made clang's vectorizer shuffle the two dots' sums across lanes (2x slower).
 - **What.** Each sum is now lane q of every cell (product p into sum p mod 8), combined at the end as `dotr` combines
