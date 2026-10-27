@@ -1,5 +1,5 @@
 # Mat.of_list -> Mat.to_list returns the same numbers, for empty, one-element, row, column and
-# rectangular matrices, with -0, infinities, NaN and a subnormal among the values. Prints the
+# rectangular matrices, with +0, -0, +inf, -inf, NaN and a subnormal among the values. Prints the
 # number of cases that differ from their list, which must be 0.
 #
 # This is the value half of the conversion guarantee. The count is the law `to_list_len` in
@@ -46,7 +46,7 @@ def cases() -> Nat:
   Nat.add(check(2n, 2n, [1.0, 2.0, 3.0, 4.0]),
   Nat.add(check(2n, 3n, [1.0, (0.0 - 0.0 : F32), 3.5, 4.25, (0.0 - 5.0 : F32), 6.0]),
   Nat.add(check(3n, 4n, [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0]),
-  Nat.add(check(1n, 8n, [0.0, (0.0 - 0.0 : F32), (1.0 / 0.0 : F32), (0.0 / 0.0 : F32), 1.0, 2.0, 0.00000000000000000000000000000000000001, 3.0]),
+  Nat.add(check(1n, 8n, [0.0, ((0.0 - 1.0 : F32) * 0.0 : F32), (1.0 / 0.0 : F32), ((0.0 - 1.0 : F32) / 0.0 : F32), (0.0 / 0.0 : F32), 1.0, 0.00000000000000000000000000000000000001, 3.0]),
   check(4n, 1n, [0.5, (0.0 - 0.5 : F32), 1.5, (0.0 - 1.5 : F32)])))))))))))
 
 def main() -> IO(Unit):
