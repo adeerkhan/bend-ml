@@ -41,7 +41,7 @@ p(f"""# bend-ml-tensor-gpu: tensor-array's products on the GPU, with tensor-arra
 # its result types; par is ignored (the GPU decides the split). Each product is one `!` call (a bang): a balanced fork
 # tree whose leaves each compute a {TM} x {TN} tile of C, every node sharing A, B and C through Base's Array.fork (two
 # handles to one block, no copy), as upstream's one-block pattern does (bendlang/bend tests/run/stencil3d.bend). On a
-# machine without a GPU, or with `--gpu off`, the same bang runs on the CPU threads.
+# machine without a GPU, or with `+RTS --gpu off -RTS`, the same bang runs on the CPU threads.
 #
 # The bits: a cell of C is computed in tensor-array's order. Product p of a dot goes to partial sum p mod 4, in
 # increasing p, each sum starting at +0.0, and the four sums are combined by TA.t8_comb with rot = k mod 4, as
