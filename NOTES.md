@@ -1511,3 +1511,8 @@ through pull request #14 (CI green).
   2026-10-27, and `gauss_mat` with `+RTS --gpu off --threads 1 -RTS` 93 M (a checksum pass included in both). That is
   tens of milliseconds, not the ~7 s a step the issue attributes to the generator, so the host time of that step is
   somewhere else (my reply on #23 asks for the program). Timed on an idle machine: pending.
+- 0.1.5.0 imports tensor-array 0.1.17.0 instead of 0.1.16.0: Bend treats two versions' `Mat` as different types, so
+  a program on 0.1.17.0 (the version the README now lists) could not pass its matrices to a tensor-gpu on 0.1.16.0.
+  0.1.17.0 only adds the cross-entropy over the array; the products are 0.1.16.0's, and the bit tests pass unchanged on
+  every lane. `reference/test_published.py` now reads the tensor-array a published package imports from its published
+  source, not the local one, so the published 0.1.4.0 is still checked against 0.1.16.0.
