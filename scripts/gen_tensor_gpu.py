@@ -50,8 +50,9 @@ p(f"""# bend-ml-tensor-gpu: tensor-array's products on the GPU, with tensor-arra
 # is never -0.0). Bend builds the device code with --fmad=false, so no multiply-add is fused. tests/bits.bend checks the
 # bits against tensor-array on many shapes, on the GPU and the CPU.
 #
-# Counter-based random numbers (fill_uniform, fill_gauss, uniform_mat, gauss_mat; the last section): n uniforms or
-# Gaussians of a counter made in one bang, each a pure function of (counter, index), with the same bits on every lane.
+# Counter-based random numbers (fill_uniform, fill_gauss, uniform_mat, gauss_mat and their _at forms; the last section):
+# n uniforms or Gaussians of a counter made in one bang, each a pure function of (counter, index), with the same bits on
+# every lane.
 #
 # Not proved, and marked so: Array.fork and Array.join are @unsafe in Base, so the defs below that call them, or take
 # a shared array, are @unsafe, and `bend main.bend` names every def that relies on them. Nothing checks that a leaf
@@ -459,7 +460,11 @@ p("""
 # =====================================================================================================================
 # Counter-based random fills (prototype). fill_uniform and fill_gauss make n numbers of a counter s in one bang, each
 # number a pure function of (s, its index), so a lane computes its cells without reading anything; uniform_mat and
-# gauss_mat give them as a tensor-array Mat. The functions behind them (rng_uniform, rng_gauss2, rng_gauss) are plain
+# gauss_mat give them as a tensor-array Mat. The _at forms (fill_uniform_at, fill_gauss_at, uniform_mat_at, gauss_mat_at)
+# make the cells i0 .. i0 + n - 1 of the same counter, so a batch can be made in slices: their cell k is the cell
+# function at i0 + k, and the Gaussians' pairs stay global (2p, 2p + 1), so an odd i0 starts with the sine half of the
+# pair (i0 - 1, i0). The plain forms are the case i0 = 0. Indexes are U32 and wrap: i0 + k is taken mod 2^32. The
+# functions behind them (rng_uniform, rng_gauss2, rng_gauss) are plain
 # Bend that a caller's own leaf (runK) can call too, to make noise where it is used (x_t = a * x_0 + b * noise in one
 # bang) instead of in an array of its own.
 #
@@ -573,21 +578,22 @@ def rng_pick(+odd: Bool, g: F32 & F32) -> F32:
 def rng_gauss(+s: U32, +i: U32) -> F32:
   rng_pick(U32.is_eq(U32.and(i, 1), 1), rng_gauss2(s, U32.shrn(i, 1n)))
 
-# the counter and the number of cells, the same for every leaf
+# the counter, the first index and the number of cells, the same for every leaf
 type FE is Data:
-  FE{s: U32, n: U32}
+  FE{s: U32, i0: U32, n: U32}
 
-def fu_go(k: Nat, +i: U32, +l: U32, +s: U32, o: Array<F32>) -> Array<F32>:
+def fu_go(k: Nat, +i: U32, +l: U32, +s: U32, +i0: U32, o: Array<F32>) -> Array<F32>:
   match k:
     case 0n: o
-    case 1n+q: fu_go(q, (i + l : U32), l, s, Array.set(F32, o, i, rng_uniform(s, i)))
+    case 1n+q: fu_go(q, (i + l : U32), l, s, i0, Array.set(F32, o, i, rng_uniform(s, (i0 + i : U32))))
 
-# leaf t writes the cells t, t + l, .. below n
+# leaf t writes the cells t, t + l, .. below n, cell k the uniform of index i0 + k
 def fu_leaf(+t: U32, +l: U32, +e: FE, x1: Array<F32>, x2: Array<F32>, x3: Array<F32>, x4: Array<F32>, o: Array<F32>) -> Array<F32>:
   match e:
-    case FE{+s, +n}: fu_go(share(t, n, l), t, l, s, o)
+    case FE{+s, +i0, +n}: fu_go(share(t, n, l), t, l, s, i0, o)
 
-# writes cell i when it is below n (the odd cell of the last pair of an odd n is not written)
+# writes cell i when it is below n (the cell before the first of an odd i0, which wraps to 2^32 - 1, and the cell after
+# the last are not written)
 def fg_if(ok: Bool, +i: U32, +x: F32, o: Array<F32>) -> Array<F32>:
   match ok:
     case True{}: Array.set(F32, o, i, x)
@@ -595,32 +601,49 @@ def fg_if(ok: Bool, +i: U32, +x: F32, o: Array<F32>) -> Array<F32>:
 
 def fg_put(+i: U32, +n: U32, g: F32 & F32, o: Array<F32>) -> Array<F32>:
   match g:
-    case Tuple{+a, +b}: fg_if(U32.is_lt((i + 1 : U32), n), (i + 1 : U32), b, Array.set(F32, o, i, a))
+    case Tuple{+a, +b}: fg_if(U32.is_lt((i + 1 : U32), n), (i + 1 : U32), b, fg_if(U32.is_lt(i, n), i, a, o))
 
-def fg_go(k: Nat, +p: U32, +l: U32, +s: U32, +n: U32, o: Array<F32>) -> Array<F32>:
+# pair j of the slice is the global pair q + j (q = i0 / 2), cells 2j - h and 2j - h + 1 of the output (h = i0 mod 2)
+def fg_go(k: Nat, +j: U32, +l: U32, +s: U32, +q: U32, +h: U32, +n: U32, o: Array<F32>) -> Array<F32>:
   match k:
     case 0n: o
-    case 1n+q: fg_go(q, (p + l : U32), l, s, n, fg_put((p + p : U32), n, rng_gauss2(s, p), o))
+    case 1n+r: fg_go(r, (j + l : U32), l, s, q, h, n, fg_put(((j + j : U32) - h : U32), n, rng_gauss2(s, (q + j : U32)), o))
 
-# leaf t writes the pairs t, t + l, .. of the (n + 1) / 2 pairs, cells 2p and 2p + 1
+# the number of global pairs that cells i0 .. i0 + n - 1 touch: (i0 mod 2 + n + 1) / 2
+def fg_pairs(+i0: U32, +n: U32) -> U32:
+  U32.shrn(((U32.and(i0, 1) + n : U32) + 1 : U32), 1n)
+
+# leaf t writes the pairs t, t + l, .. of the slice's pairs, each into the cells of it that lie in the slice
 def fg_leaf(+t: U32, +l: U32, +e: FE, x1: Array<F32>, x2: Array<F32>, x3: Array<F32>, x4: Array<F32>, o: Array<F32>) -> Array<F32>:
   match e:
-    case FE{+s, +n}: fg_go(share(t, U32.shrn((n + 1 : U32), 1n), l), t, l, s, n, o)
+    case FE{+s, +i0, +n}: fg_go(share(t, fg_pairs(i0, n), l), t, l, s, U32.shrn(i0, 1n), U32.and(i0, 1), n, o)
 
 def r1_out(r: R1) -> Array<F32>:
   match r:
     case R1{x1, x2, x3, x4, a}: a
 
+# n uniforms of counter s from index i0, cell k = rng_uniform(s, i0 + k) (mod 2^32), in a new array of 2^c cells made
+# on the device (one bang)
+@unsafe
+def fill_uniform_at(+s: U32, +i0: U32, +n: Nat, +c: Nat) -> Array<F32>:
+  r1_out(run1_new(~FE, ~fu_leaf, depth(n), FE{s, i0, U32.from_nat(n)}, none(Unit{}), none(Unit{}), none(Unit{}), none(Unit{}), c))
+
+# n Gaussians of counter s from index i0, cell k = rng_gauss(s, i0 + k) (mod 2^32), in a new array of 2^c cells made
+# on the device (one bang, a lane a global pair of cells; an odd i0 starts with the sine half of the pair (i0 - 1, i0))
+@unsafe
+def fill_gauss_at(+s: U32, +i0: U32, +n: Nat, +c: Nat) -> Array<F32>:
+  r1_out(run1_new(~FE, ~fg_leaf, depth(U32.to_nat(fg_pairs(i0, U32.from_nat(n)))), FE{s, i0, U32.from_nat(n)}, none(Unit{}), none(Unit{}), none(Unit{}), none(Unit{}), c))
+
 # n uniforms of counter s, cell i = rng_uniform(s, i), in a new array of 2^c cells made on the device (one bang)
 @unsafe
 def fill_uniform(+s: U32, +n: Nat, +c: Nat) -> Array<F32>:
-  r1_out(run1_new(~FE, ~fu_leaf, depth(n), FE{s, U32.from_nat(n)}, none(Unit{}), none(Unit{}), none(Unit{}), none(Unit{}), c))
+  fill_uniform_at(s, 0, n, c)
 
 # n Gaussians of counter s, cell i = rng_gauss(s, i), in a new array of 2^c cells made on the device (one bang, a lane a
 # pair of cells)
 @unsafe
 def fill_gauss(+s: U32, +n: Nat, +c: Nat) -> Array<F32>:
-  r1_out(run1_new(~FE, ~fg_leaf, depth(U32.to_nat(U32.shrn((U32.from_nat(n) + 1 : U32), 1n))), FE{s, U32.from_nat(n)}, none(Unit{}), none(Unit{}), none(Unit{}), none(Unit{}), c))
+  fill_gauss_at(s, 0, n, c)
 
 # an r x m Mat of uniforms of counter s, row-major (cell i * m + j = rng_uniform(s, i * m + j))
 @unsafe
@@ -631,6 +654,18 @@ def uniform_mat(+s: U32, +r: Nat, +m: Nat) -> TA.Mat<r, m>:
 @unsafe
 def gauss_mat(+s: U32, +r: Nat, +m: Nat) -> TA.Mat<r, m>:
   TA.Mat{fill_gauss(s, Nat.mul(r, m), TA.cap_depth(Nat.mul(r, m)))}
+
+# an r x m Mat of uniforms of counter s from index i0 (cell i * m + j = rng_uniform(s, i0 + i * m + j)); rows b .. b + r - 1
+# of an R x m uniform_mat are uniform_mat_at(s, b * m, r, m)
+@unsafe
+def uniform_mat_at(+s: U32, +i0: U32, +r: Nat, +m: Nat) -> TA.Mat<r, m>:
+  TA.Mat{fill_uniform_at(s, i0, Nat.mul(r, m), TA.cap_depth(Nat.mul(r, m)))}
+
+# an r x m Mat of Gaussians of counter s from index i0 (cell i * m + j = rng_gauss(s, i0 + i * m + j)); rows
+# b .. b + r - 1 of an R x m gauss_mat are gauss_mat_at(s, b * m, r, m)
+@unsafe
+def gauss_mat_at(+s: U32, +i0: U32, +r: Nat, +m: Nat) -> TA.Mat<r, m>:
+  TA.Mat{fill_gauss_at(s, i0, Nat.mul(r, m), TA.cap_depth(Nat.mul(r, m)))}
 """)
 open(OUT, "w").write("\n".join(o) if False else "".join(x if x.endswith("\n") else x + "\n" for x in o))
 print(f"{OUT}: {TM}x{TN} tiles, {len(S)} sums, {len(V)} values a turn")
