@@ -116,6 +116,7 @@ sums changed on purpose):
 | v1.6.2 | the checks guard the runtime options: one outside `+RTS ... -RTS` fails them, test programs refuse arguments, and a probe checks that 1 and 16 threads use 1 and several cores | the packages and their bits unchanged |
 | v1.7.0 | Bend 2.0.39; `binary-read` 0.2.0.0: reads at 64-bit offsets, BF16 files and reads into a cell offset; `nat-lemmas` 0.1.2.0: `add4`, `mul_dist_l`; `tensor-array` 0.1.16.0 with `tensor-fork` and `tensor-gpu` 0.1.4.0 (0.1.14.0's code again, after 0.1.15.0's faster loop proved slower inside a whole program) | GPT-2 128 ms a token on one thread, 86 on 16 (138 and 106 with Bend 2.0.38); the products' bits those of 0.1.14.0 |
 | v1.7.1 | `tensor-array` 0.1.17.0: `Mat.softmax_ce` walks its rows over the array, with the same bits | the cross-entropy of 64 rows of 49,152 3.7x faster on 16 threads; MNIST unchanged |
+| v1.8.0 | `tensor-gpu` 0.1.5.0: uniform and Gaussian fills of a counter made on the device, with offset forms for slices (asked in #23); `tensor-array` 0.1.18.0: the law `to_list_len` and an empty `Mat.to_list` that gives `Nil` (#22, by @adeerkhan) | the fills' words the same on the GPU, the CPU threads, the JS lane and a NumPy twin; 6.0-7.6 ms a 256 x 3072 Gaussian fill on every lane; the products' bits unchanged |
 
 Versions are numbered as in [`docs/VERSIONING.md`](docs/VERSIONING.md); each release has its notes on GitHub.
 
