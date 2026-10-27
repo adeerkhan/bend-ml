@@ -58,7 +58,7 @@ p(f"""# bend-ml-tensor-gpu: tensor-array's products on the GPU, with tensor-arra
 # writes only its own tile of C, or never writes A or B; the tiles are disjoint by construction (leaf t writes tile t).
 # All of it is Bend: no foreign code. Written by bend-ml's scripts/gen_tensor_gpu.py ({TM} x {TN} tiles).
 import Base
-import bend-ml-tensor-array@0.1.16.0/main.bend as TA
+import bend-ml-tensor-array@0.1.17.0/main.bend as TA
 
 # the sizes and strides of one product: C[i][j] = sum_p A[oa + i*arow + p*sa] * B[ob + p*sb + j*bcol], n x m, k steps
 # (oa, ob: 0 except for matmul_precise's blocks)
