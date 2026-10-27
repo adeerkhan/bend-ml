@@ -213,6 +213,7 @@ def main():
     run("bpe vs Python reference (train/encode/decode)", [PY, "reference/test_bpe.py"])
     run("tensor vs PyTorch", [PY, "reference/test_tensor.py"])
     run("tensor-array vs PyTorch", [PY, "reference/test_tensor_array.py"])
+    run("tensor-gpu's random fills vs a NumPy float32 twin, word for word", [PY, "reference/test_rng.py"])
     run("runtime batch size (examples/runtime_batch.bend) vs NumPy", [PY, "reference/test_runtime_batch.py"])
     run("autograd vs PyTorch (gradient checking)", [PY, "reference/test_autograd.py"])
     cases = "80" if FULL else "30"
