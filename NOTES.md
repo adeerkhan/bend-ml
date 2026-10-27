@@ -1510,7 +1510,10 @@ through pull request #14 (CI green).
   (`TA.Mat.from_list(256n, 3072n, G.noise_of(s, 786432n))`, compiled, one thread) took 233 M user instructions on
   2026-10-27, and `gauss_mat` with `+RTS --gpu off --threads 1 -RTS` 93 M (a checksum pass included in both). That is
   tens of milliseconds, not the ~7 s a step the issue attributes to the generator, so the host time of that step is
-  somewhere else (my reply on #23 asks for the program). Timed on an idle machine: pending.
+  somewhere else (my reply on #23 asks for the program). Timed on the idle machine (2026-10-27, 100 fills of
+  256 x 3072, whole programs, three runs each): the host list 1.98-1.99 s on one thread, about 20 ms a fill;
+  `bench/fill_gauss.bend` 0.75-0.76 s on one thread, 0.60-0.65 s on 16 and 0.68-0.70 s on the RTX 4050 after a first
+  run of 2.75 s (the kernel's compile), so 6-7.5 ms a fill on every lane, the same checksum on all of them.
 - 0.1.5.0 imports tensor-array 0.1.17.0 instead of 0.1.16.0: Bend treats two versions' `Mat` as different types, so
   a program on 0.1.17.0 (the version the README now lists) could not pass its matrices to a tensor-gpu on 0.1.16.0.
   0.1.17.0 only adds the cross-entropy over the array; the products are 0.1.16.0's, and the bit tests pass unchanged on
