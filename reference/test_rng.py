@@ -2,7 +2,9 @@
 
 The fills use only + - * /, sqrt, integer operations and exact conversions, so NumPy's float32, doing the same
 operations in the same order, gives the same 32 bits. Compiles tensor-gpu/tests/words.bend (the words of 4,096 cells
-from the bangs, then 4,096 cells where the U32 indexes wrap) and compares each with the twin below.
+from the bangs, then 4,096 cells where the U32 indexes wrap, then two offset slices from fill_gauss_at and
+fill_uniform_at, both from an odd index: 4,095 cells from 2^32 - 2047, which wrap, and 777 from 12345) and compares
+each with the twin below at the cell's global index, so a slice's pairs are the full fill's.
 """
 import os, subprocess, sys, tempfile
 import numpy as np
@@ -97,6 +99,7 @@ def main():
         out = subprocess.run([exe, "+RTS", "--gpu", "off", "-RTS"], capture_output=True, text=True, env=ENV).stdout
     rows = [tuple(map(int, l.split())) for l in out.splitlines() if l.strip()]
     cells = list(range(4096)) + list(range(2**32 - 4096, 2**32))
+    cells += [(2**32 - 2047 + k) % 2**32 for k in range(4095)] + [12345 + k for k in range(777)]
     if len(rows) != len(cells):
         print(f"ERROR expected {len(cells)} lines, got {len(rows)}")
         sys.exit(1)
