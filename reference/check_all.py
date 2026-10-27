@@ -116,6 +116,11 @@ def main():
     results.append(clean)
     print(f"{'ok  ' if clean else 'ERROR'} no package with laws imports tensor-gpu")
     gpu_want = ["0", "0", "2958"] + ["0"] * 9
+    # tests/fill.bend: the fills against their cell functions (0 differing words), mlbend-generative's uniform (0), the
+    # ulp of ln, sin and cos against libm (2, 1 1), Box-Muller against libm's, and the moments; the same lines on every
+    # lane, since the numbers are + - * / and sqrt only
+    fill_want = ["0 0"] * 6 + ["0", "0", "2", "1 1", "0.0000013113022",
+                                "0.0009277552 0.9998181 0.6830969 0.95434856 0.99730206 ok", "0.4998817 0.08327992 1 1 1 ok"]
     with tempfile.TemporaryDirectory() as d:
         tg = os.path.join(d, "tg")
         run("compile tensor-gpu/tests/bits.bend", [BEND, "tensor-gpu/tests/bits.bend", "-o", tg])
@@ -127,6 +132,11 @@ def main():
         for t in ["1", "16"]:
             run(f"tensor-gpu's run1..run4 and run1_new..run4_new give their leaf's bits, inputs intact: 5 sizes ({t} CPU threads)",
                 [tk, "+RTS", "--threads", t, "-RTS"], lambda o, c: o.split() == ["0"] * 10)
+        tf = os.path.join(d, "tf")
+        run("compile tensor-gpu/tests/fill.bend", [BEND, "tensor-gpu/tests/fill.bend", "-o", tf])
+        for t in ["1", "16"]:
+            run(f"tensor-gpu's fill_uniform, fill_gauss and gauss_mat give their cell functions' bits, near libm, sane moments ({t} CPU threads)",
+                [tf, "+RTS", "--threads", t, "-RTS"], lambda o, c: o.splitlines() == fill_want)
         cuda = os.environ.get("CUDA_HOME") or os.path.expanduser("~/.local/cuda12")
         if os.path.isdir(cuda):
             tgg = os.path.join(d, "tgg")
@@ -137,6 +147,9 @@ def main():
             run("compile tensor-gpu/tests/kernels.bend for CUDA", [BEND, "tensor-gpu/tests/kernels.bend", "-o", tkg], extra_env=env)
             run("tensor-gpu's run1..run4 and run1_new..run4_new give their leaf's bits on the GPU, inputs intact", [tkg],
                 lambda o, c: o.split() == ["0"] * 10, extra_env=env)
+            tfg = os.path.join(d, "tfg")
+            run("compile tensor-gpu/tests/fill.bend for CUDA", [BEND, "tensor-gpu/tests/fill.bend", "-o", tfg], extra_env=env)
+            run("tensor-gpu's fills give the CPU threads' bits on the GPU", [tfg], lambda o, c: o.splitlines() == fill_want, extra_env=env)
             tgp = os.path.join(d, "tgp")
             run("compile tensor-gpu/tests/precise.bend for CUDA", [BEND, "tensor-gpu/tests/precise.bend", "-o", tgp], extra_env=env)
             run("tensor-gpu's matmul_precise gives tensor-array's bits on the GPU: 21 products", [tgp],
@@ -148,6 +161,8 @@ def main():
     if FULL:
         run("tensor-gpu/tests/bits.bend on the JS lane", [BEND, "tensor-gpu/tests/bits.bend"],
             lambda o, c: re.findall(r"^[0-9 ]+$", o, re.M) == ["0 0 2958", "0 0 0 0 0 0", "0 0 0"])
+        run("tensor-gpu/tests/fill.bend on the JS lane", [BEND, "tensor-gpu/tests/fill.bend"],
+            lambda o, c: o.splitlines()[-len(fill_want):] == fill_want)
 
     # 2. shape errors that MUST fail to check
     for f, msg in [("tensor/tests/bad_matmul.bend", "expected"), ("tensor/tests/bad_reshape.bend", "expected"), ("tensor-array/tests/bad_matmul.bend", "expected"), ("tensor-array/tests/bad_grad.bend", "expected"), ("examples/runtime_batch_bad.bend", "expected"), ("examples/symbolic_reshape_bad.bend", "expected"), ("examples/square_transpose_bad.bend", "expected"), ("tensor-array/tests/bad_bands.bend", "expected")]:
