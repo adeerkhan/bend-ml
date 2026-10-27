@@ -34,7 +34,7 @@ p = o.append
 p(f"""# bend-ml-tensor-gpu: tensor-array's products on the GPU, with tensor-array's bits.
 #
 #   import ../tensor-array/main.bend as TA
-#   import bend-ml-tensor-gpu@0.1.4.0/main.bend as TG
+#   import bend-ml-tensor-gpu@0.1.5.0/main.bend as TG
 #   TG.matmul(n, k, m, par, a, b)      # the same arguments, result type and bits as TA.Mat.matmul
 #
 # The six products (matmul, matmul_nt, matmul_tn and their accumulating forms) take tensor-array's Mat values and return
