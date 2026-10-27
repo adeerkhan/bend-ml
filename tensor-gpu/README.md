@@ -19,7 +19,8 @@ between the leaves of a fork tree through Base's `@unsafe` `Array.fork`.
 - Tests: `tests/bits.bend`, against tensor-array, bit for bit, on the GPU, on 1 and 16 CPU threads and on the JS lane;
   `tests/kernels.bend`, `run1`..`run4` and `run1_new`..`run4_new` against their leaf run once over every cell, on the
   GPU and on 1 and 16 CPU threads; `tests/fill.bend`, the random fills (below) against their cell functions, bit for
-  bit, on every lane, with their distance to libm and their moments.
+  bit, on every lane, with their distance to libm and their moments; `reference/test_rng.py`, a NumPy float32 twin of
+  the fills, word for word.
 - Written by [`scripts/gen_tensor_gpu.py`](../scripts/gen_tensor_gpu.py) (4 x 4 tiles): a tile carries 64 sums through
   its loop, which is tedious to write by hand.
 
@@ -108,7 +109,8 @@ is made on the device.
   CUDA's float functions give other bits than the host's. `+ - * /` and `sqrt` are IEEE's on every lane and Bend fuses
   no multiply-add, so the fills give the same words on the GPU, on 1 and 16 CPU threads and on the JS lane. They are
   close to libm, not equal: at most 2 ulp for ln, 1 for sin and cos, and 1.3e-6 between a Gaussian and Box-Muller with
-  libm's functions over 2^18 cells (most of it from writing 2π as `6.2831855` there).
+  libm's functions over 2^18 cells (most of it from writing 2π as `6.2831855` there). A twin in NumPy's float32 that
+  does the same operations in the same order gives the same words (`reference/test_rng.py`).
 - The cell functions (`rng_uniform(s, i)`, `rng_gauss2(s, p)` for a pair, `rng_gauss(s, i)` for one cell) are plain
   Bend, so a leaf of your own (`runK`) can make the noise where it is used, for instance x_t = a x_0 + b ε in one bang,
   with no array of noise in between.
