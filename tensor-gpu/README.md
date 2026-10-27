@@ -14,11 +14,12 @@ between the leaves of a fork tree through Base's `@unsafe` `Array.fork`.
   (no copy, no pages pulled back): a SmolLM2-sized block step on the GPU 975 -> ~695 ms for 3 (2026-10-18); 0.1.3.0,
   tensor-array 0.1.15.0's order in 4 x 2 tiles (not recommended, see tensor-array's README, 0.1.16.0); 0.1.4.0, 0.1.2.1's
   code on tensor-array 0.1.16.0, with its bits (2026-10-25).
-- `bend tensor-gpu/main.bend` → `SOME PROOFS FAIL`, naming the 54 defs that rely on `@unsafe` code. All of it is Bend:
+- `bend tensor-gpu/main.bend` → `SOME PROOFS FAIL`, naming the 58 defs that rely on `@unsafe` code. All of it is Bend:
   no foreign code, no CUDA written by hand.
 - Tests: `tests/bits.bend`, against tensor-array, bit for bit, on the GPU, on 1 and 16 CPU threads and on the JS lane;
   `tests/kernels.bend`, `run1`..`run4` and `run1_new`..`run4_new` against their leaf run once over every cell, on the
-  GPU and on 1 and 16 CPU threads.
+  GPU and on 1 and 16 CPU threads; `tests/fill.bend`, the random fills (below) against their cell functions, bit for
+  bit, on every lane, with their distance to libm and their moments.
 - Written by [`scripts/gen_tensor_gpu.py`](../scripts/gen_tensor_gpu.py) (4 x 4 tiles): a tile carries 64 sums through
   its loop, which is tedious to write by hand.
 
@@ -90,6 +91,33 @@ def twice(+n: Nat, +c: Nat, x: Array<F32>) -> TG.R1:
 - The bits are the leaf's own code, the same on the GPU as on the CPU threads, except where CUDA's math functions
   differ from the host's (an `exp` on the device takes the float overload; the known limit of [bendlang/bend#1305](https://github.com/bendlang/bend/issues/1305)).
 - BendTorch's GPU layers are written over these.
+
+## Random fills (on `devel`, not on BendHub yet)
+
+`fill_uniform(s, n, c)` and `fill_gauss(s, n, c)` make n uniforms or Gaussians of a counter s (a `U32`, such as the
+training step) in a new array of 2^c cells, in one bang; `uniform_mat(s, r, m)` and `gauss_mat(s, r, m)` give them as an
+r x m `Mat`. Cell i is a pure function of (s, i), so a lane computes its cells without reading anything, and the array
+is made on the device.
+
+- The uniform is mlbend-generative 0.1.0.0's: its mix32 over `s * 0x9E3779B9 + i + 0x1234567A`, the low 24 bits plus
+  one over 2^24, in (0, 1]. `rng_uniform(s, i)` gives that package's words (the test checks 2^20 of them).
+- A Gaussian is Box-Muller over the pair (2p, 2p + 1): cell 2p is r cos(2π u_b) and cell 2p + 1 is r sin(2π u_b), with
+  r = sqrt(-2 ln u_a), u_a the uniform of index 2p and u_b of 2p + 1. A lane makes a pair, so each pair costs one ln,
+  one sqrt and one sine and cosine.
+- ln, sin and cos are written in Bend with `+ - * /` and the exponent's bits, not with `F32.log`/`sin`/`cos`, because
+  CUDA's float functions give other bits than the host's. `+ - * /` and `sqrt` are IEEE's on every lane and Bend fuses
+  no multiply-add, so the fills give the same words on the GPU, on 1 and 16 CPU threads and on the JS lane. They are
+  close to libm, not equal: at most 2 ulp for ln, 1 for sin and cos, and 1.3e-6 between a Gaussian and Box-Muller with
+  libm's functions over 2^18 cells (most of it from writing 2π as `6.2831855` there).
+- The cell functions (`rng_uniform(s, i)`, `rng_gauss2(s, p)` for a pair, `rng_gauss(s, i)` for one cell) are plain
+  Bend, so a leaf of your own (`runK`) can make the noise where it is used, for instance x_t = a x_0 + b ε in one bang,
+  with no array of noise in between.
+- Moments of 2^20 Gaussians of counter 1: mean 0.00093, variance 0.99982, and 0.6831, 0.9543 and 0.9973 of them inside
+  1, 2 and 3 (the normal's 0.6827, 0.9545, 0.9973). This is a sanity check, not a test of the generator's quality.
+
+```python
+eps = TG.gauss_mat(step, 256n, 3072n)   # TA.Mat<256n, 3072n>, cell i = TG.rng_gauss(step, i)
+```
 
 ## Speed (first measurement)
 
