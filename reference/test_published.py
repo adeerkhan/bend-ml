@@ -117,9 +117,23 @@ def check_read():
     return ok
 
 
-# the tensor-array version a published package imports (its Mat types are that version's), read from its source
+# the tensor-array version a published package imports (its Mat types are that version's), read from the published
+# source in Bend's package store (~/.bend/lib, names/<pkg>@<ver> holds the hash of its folder) after an import fetches
+# it, so a newer local version on another tensor-array does not change what is checked; the local source if the store
+# has no copy
+LIB = os.path.expanduser("~/.bend/lib")
+
 def ta_of(pkg):
-    src = open(os.path.join(ROOT, pkg.replace("bend-ml-", ""), "main.bend"), encoding="utf-8").read()
+    ver = f"{pkg}@{VERS[pkg]}"
+    with tempfile.TemporaryDirectory() as d:
+        f = os.path.join(d, "fetch.bend")
+        open(f, "w").write(f'import Base\nimport {ver}/main.bend as P\n\ndef main() -> IO(Unit):\n  IO.print("")\n')
+        subprocess.run([BEND, f], capture_output=True, text=True, env=ENV, cwd=d)
+    try:
+        h = open(os.path.join(LIB, "names", ver), encoding="utf-8").read().strip()
+        src = open(os.path.join(LIB, h, "main.bend"), encoding="utf-8").read()
+    except OSError:
+        src = open(os.path.join(ROOT, pkg.replace("bend-ml-", ""), "main.bend"), encoding="utf-8").read()
     return re.search(r"import (bend-ml-tensor-array@[0-9.]+)/main.bend", src).group(1)
 
 
