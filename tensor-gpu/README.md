@@ -6,14 +6,15 @@ when there is one; and, since 0.1.1.0, bangs over any leaf code written in plain
 a training step (element-wise layers, norms, attention, the optimizer). It is **not proved**, and says so: like [`bend-ml-tensor-fork`](../tensor-fork), it shares arrays
 between the leaves of a fork tree through Base's `@unsafe` `Array.fork`.
 
-- Bend: **2.0.39** · License: MIT · Depends on `bend-ml-tensor-array@0.1.16.0`. Versions on BendHub: 0.1.0.0, the
-  products alone (hash `0xb00297062e21c56b88008f0c5387c0a0`); 0.1.1.0, with `run1`..`run4`
+- Bend: **2.0.39** · License: MIT · Depends on `bend-ml-tensor-array@0.1.17.0` (0.1.4.0, the latest on BendHub, on
+  0.1.16.0). Versions on BendHub: 0.1.0.0, the products alone (hash `0xb00297062e21c56b88008f0c5387c0a0`); 0.1.1.0, with `run1`..`run4`
   (`0x92c8fe8f8abfa0e0018d7f1c3ddd061c`), both on tensor-array 0.1.12.0; 0.1.1.1, the same code on tensor-array
   0.1.13.0; 0.1.2.0, `matmul_precise` (tensor-array 0.1.14.0's opt-in precise product, a bang a block, its slices copied on the
   host) on tensor-array 0.1.14.0; 0.1.2.1, the same product with every block's bang starting at its place in A and B
   (no copy, no pages pulled back): a SmolLM2-sized block step on the GPU 975 -> ~695 ms for 3 (2026-10-18); 0.1.3.0,
   tensor-array 0.1.15.0's order in 4 x 2 tiles (not recommended, see tensor-array's README, 0.1.16.0); 0.1.4.0, 0.1.2.1's
-  code on tensor-array 0.1.16.0, with its bits (2026-10-25).
+  code on tensor-array 0.1.16.0, with its bits (2026-10-25). Next, **not on BendHub yet**: 0.1.5.0, the random fills
+  (below) on tensor-array 0.1.17.0, whose products are 0.1.16.0's, so the products keep their bits.
 - `bend tensor-gpu/main.bend` → `SOME PROOFS FAIL`, naming the 58 defs that rely on `@unsafe` code. All of it is Bend:
   no foreign code, no CUDA written by hand.
 - Tests: `tests/bits.bend`, against tensor-array, bit for bit, on the GPU, on 1 and 16 CPU threads and on the JS lane;
@@ -93,7 +94,7 @@ def twice(+n: Nat, +c: Nat, x: Array<F32>) -> TG.R1:
   differ from the host's (an `exp` on the device takes the float overload; the known limit of [bendlang/bend#1305](https://github.com/bendlang/bend/issues/1305)).
 - BendTorch's GPU layers are written over these.
 
-## Random fills (on `devel`, not on BendHub yet)
+## Random fills (0.1.5.0, not on BendHub yet)
 
 `fill_uniform(s, n, c)` and `fill_gauss(s, n, c)` make n uniforms or Gaussians of a counter s (a `U32`, such as the
 training step) in a new array of 2^c cells, in one bang; `uniform_mat(s, r, m)` and `gauss_mat(s, r, m)` give them as an
