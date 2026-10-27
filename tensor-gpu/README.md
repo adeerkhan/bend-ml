@@ -15,13 +15,14 @@ between the leaves of a fork tree through Base's `@unsafe` `Array.fork`.
   tensor-array 0.1.15.0's order in 4 x 2 tiles (not recommended, see tensor-array's README, 0.1.16.0); 0.1.4.0, 0.1.2.1's
   code on tensor-array 0.1.16.0, with its bits (2026-10-25). Next, **not on BendHub yet**: 0.1.5.0, the random fills
   (below) on tensor-array 0.1.17.0, whose products are 0.1.16.0's, so the products keep their bits.
-- `bend tensor-gpu/main.bend` → `SOME PROOFS FAIL`, naming the 58 defs that rely on `@unsafe` code. All of it is Bend:
+- `bend tensor-gpu/main.bend` → `SOME PROOFS FAIL`, naming the 62 defs that rely on `@unsafe` code. All of it is Bend:
   no foreign code, no CUDA written by hand.
 - Tests: `tests/bits.bend`, against tensor-array, bit for bit, on the GPU, on 1 and 16 CPU threads and on the JS lane;
   `tests/kernels.bend`, `run1`..`run4` and `run1_new`..`run4_new` against their leaf run once over every cell, on the
   GPU and on 1 and 16 CPU threads; `tests/fill.bend`, the random fills (below) against their cell functions, bit for
-  bit, on every lane, with their distance to libm and their moments; `reference/test_rng.py`, a NumPy float32 twin of
-  the fills, word for word.
+  bit, on every lane, with the offset fills against their cell functions and against slices of a full fill, their
+  distance to libm and their moments; `reference/test_rng.py`, a NumPy float32 twin of the fills and of two offset
+  slices, word for word.
 - Written by [`scripts/gen_tensor_gpu.py`](../scripts/gen_tensor_gpu.py) (4 x 4 tiles): a tile carries 64 sums through
   its loop, which is tedious to write by hand.
 
@@ -115,11 +116,20 @@ is made on the device.
 - The cell functions (`rng_uniform(s, i)`, `rng_gauss2(s, p)` for a pair, `rng_gauss(s, i)` for one cell) are plain
   Bend, so a leaf of your own (`runK`) can make the noise where it is used, for instance x_t = a x_0 + b ε in one bang,
   with no array of noise in between.
+- Offset fills, for a batch made in slices: `fill_uniform_at(s, i0, n, c)` and `fill_gauss_at(s, i0, n, c)` make the
+  cells i0 .. i0 + n - 1 of counter s, and `uniform_mat_at(s, i0, r, m)` and `gauss_mat_at(s, i0, r, m)` give them as
+  an r x m `Mat`. Output cell k is `rng_uniform(s, i0 + k)` or `rng_gauss(s, i0 + k)`, so a slice has the same words
+  as those cells of a full fill: rows b .. b + r - 1 of an R x m `gauss_mat(s, R, m)` are `gauss_mat_at(s, b * m, r, m)`.
+  The Gaussians' pairs stay global, not per slice: with an odd i0 the first cell is the sine half of the pair
+  (i0 - 1, i0), and when the last index i0 + n - 1 is even the last cell is the cosine half of its pair. A lane still
+  makes a whole pair and writes the halves that fall in the slice. The plain fills are the case i0 = 0, with the same
+  words as before. i0 is a `U32`, like the cell functions' index, and i0 + k wraps mod 2^32.
 - Moments of 2^20 Gaussians of counter 1: mean 0.00093, variance 0.99982, and 0.6831, 0.9543 and 0.9973 of them inside
   1, 2 and 3 (the normal's 0.6827, 0.9545, 0.9973). This is a sanity check, not a test of the generator's quality.
 
 ```python
 eps = TG.gauss_mat(step, 256n, 3072n)   # TA.Mat<256n, 3072n>, cell i = TG.rng_gauss(step, i)
+part = TG.gauss_mat_at(step, 113664, 16n, 3072n)   # i0 = 37 * 3072: rows 37 .. 52 of eps, the same words
 ```
 
 ## Speed (first measurement)
