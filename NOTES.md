@@ -1530,3 +1530,17 @@ through pull request #14 (CI green).
   0.1.17.0 only adds the cross-entropy over the array; the products are 0.1.16.0's, and the bit tests pass unchanged on
   every lane. `reference/test_published.py` now reads the tensor-array a published package imports from its published
   source, not the local one, so the published 0.1.4.0 is still checked against 0.1.16.0.
+
+## tensor-array: the law to_list_len and the empty to_list (bend-ml #22, 2026-10-27, not published)
+
+- Contributed by adeerkhan (pull request #22, related to #20), merged into `devel` on 2026-10-27.
+- The fix: `Mat.to_list` read `Nat.sub(r*c, 1) + 1` numbers, and `Nat.sub(0, 1)` is 0 on `Nat`, so a matrix with 0
+  rows or 0 columns gave a one-element list read from an empty array. `Mat.to_list_count` matches on the count instead,
+  and 0 gives `Nil`.
+- The law `to_list_len`: `Mat.to_list` reads exactly `r*c` numbers, the empty case included (by `read_ml_len`, the
+  count of `read_l` through `to_list2`, and `to_list_count_len`).
+- The numbers themselves are tested, not proved: `tensor-array/tests/roundtrip.bend`, in `make check`, runs
+  `Mat.of_list` then `Mat.to_list` on 11 shapes (0 x 0, 0 x 5, 5 x 0, a row, a column, rectangles) with -0, infinities,
+  NaN and a subnormal, word for word, and prints 0. A content law needs the checker to follow `Array.set`/`Array.get` on
+  a neutral array, which Base has no lemma for (the same reason `leaf_len` and `band_len` count lists).
+- Every other def is 0.1.17.0's, so the products and the cross-entropy keep their bits.
