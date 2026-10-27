@@ -468,7 +468,7 @@ p("""
 # Box-Muller over the pair (2p, 2p + 1): cell 2p is r cos(2 pi u_b), cell 2p + 1 is r sin(2 pi u_b), with
 # r = sqrt(-2 ln u_a), u_a the uniform of index 2p and u_b of 2p + 1, so each pair costs one ln, one sqrt and one sine
 # and cosine. ln, sin and cos are written here with + - * / and the exponent's bits, not F32.log/sin/cos: CUDA's float
-# functions give other bits than the host's (bend-ml's docs/upstream/gpu-math-overloads.md), while + - * / and sqrt are
+# functions give other bits than the host's (bendlang/bend#1305), while + - * / and sqrt are
 # IEEE's on every lane and Bend fuses no multiply-add, so these numbers have the same bits on the GPU, on the CPU
 # threads and on the JS lane. They are within a few ulp of the libm values (tests/fill.bend measures it), not equal.
 # =====================================================================================================================
