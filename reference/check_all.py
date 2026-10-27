@@ -116,10 +116,11 @@ def main():
     results.append(clean)
     print(f"{'ok  ' if clean else 'ERROR'} no package with laws imports tensor-gpu")
     gpu_want = ["0", "0", "2958"] + ["0"] * 9
-    # tests/fill.bend: the fills against their cell functions (0 differing words), mlbend-generative's uniform (0), the
+    # tests/fill.bend: the fills against their cell functions (0 differing words), the offset fills against theirs and
+    # against slices of a full fill (0 0 twelve times), mlbend-generative's uniform (0), the
     # ulp of ln, sin and cos against libm (2, 1 1), Box-Muller against libm's, and the moments; the same lines on every
     # lane, since the numbers are + - * / and sqrt only
-    fill_want = ["0 0"] * 6 + ["0", "0", "2", "1 1", "0.0000013113022",
+    fill_want = ["0 0"] * 6 + ["0"] + ["0 0"] * 12 + ["0", "2", "1 1", "0.0000013113022",
                                 "0.0009277552 0.9998181 0.6830969 0.95434856 0.99730206 ok", "0.4998817 0.08327992 1 1 1 ok"]
     with tempfile.TemporaryDirectory() as d:
         tg = os.path.join(d, "tg")
@@ -135,7 +136,7 @@ def main():
         tf = os.path.join(d, "tf")
         run("compile tensor-gpu/tests/fill.bend", [BEND, "tensor-gpu/tests/fill.bend", "-o", tf])
         for t in ["1", "16"]:
-            run(f"tensor-gpu's fill_uniform, fill_gauss and gauss_mat give their cell functions' bits, near libm, sane moments ({t} CPU threads)",
+            run(f"tensor-gpu's fills and offset fills give their cell functions' bits, near libm, sane moments ({t} CPU threads)",
                 [tf, "+RTS", "--threads", t, "-RTS"], lambda o, c: o.splitlines() == fill_want)
         cuda = os.environ.get("CUDA_HOME") or os.path.expanduser("~/.local/cuda12")
         if os.path.isdir(cuda):
