@@ -1496,7 +1496,7 @@ through pull request #14 (CI green).
 - The words: the counter hash and the uniform are mlbend-generative 0.1.0.0's (the test checks 2^20 uniforms against its
   formula: 0 differ), Box-Muller over (2p, 2p + 1). ln, sin and cos are mine, in `+ - * /` and the exponent's bits
   (ln from atanh's series on [sqrt(1/2), sqrt(2)], sin and cos by Taylor on [0, π/4] from the angle's 24 bits, so the
-  reduction is exact): with `F32.log`/`sin`/`cos` the GPU would give other bits (`docs/upstream/gpu-math-overloads.md`).
+  reduction is exact): with `F32.log`/`sin`/`cos` the GPU would give other bits (the known limit of bendlang/bend#1305).
   Against libm: ln at most 2 ulp (2^20 points of the uniform grid), sin and cos 1 ulp (all 2^21 arguments), a Gaussian
   1.3e-6 from Box-Muller with libm's functions (2^18 cells; mostly that formula's 2π written as `6.2831855`).
 - `tensor-gpu/tests/fill.bend`, in `make check`: the fills against their cell functions on the host, bit for bit (n =
