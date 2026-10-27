@@ -154,6 +154,10 @@ def main():
         run(f"{f} must be a type error", [BEND, f], lambda o, c, m=msg: "SOME PROOFS FAIL" in o and m in o)
     run("tensor/tests/ok.bend compiles and runs", [BEND, "tensor/tests/ok.bend"], lambda o, c: "18 18 18 18" in o)
     run("tensor-array/tests/ok.bend compiles and runs", [BEND, "tensor-array/tests/ok.bend"], lambda o, c: o.strip() == "8n")
+    with tempfile.TemporaryDirectory() as d:
+        roundtrip = os.path.join(d, "roundtrip")
+        run("compile tensor-array/tests/roundtrip.bend", [BEND, "tensor-array/tests/roundtrip.bend", "-o", roundtrip])
+        run("Mat.of_list -> Mat.to_list returns the same numbers, empty included", [roundtrip], lambda o, c: o.strip() == "0")
     run("examples/symbolic_reshape.bend reshapes Mat<3, 6> into Mat<6, 3>", [BEND, "examples/symbolic_reshape.bend", "--", "3"], lambda o, c: "regroup(x) : Mat<6, 3>" in o and "15 16 17" in o)
     # the list-based baselines of the demos: nothing else builds them (train.bend went unchecked from v0.3 to v1.2.2)
     with tempfile.TemporaryDirectory() as d:
