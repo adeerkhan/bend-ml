@@ -1487,12 +1487,12 @@ through pull request #14 (CI green).
   benchmarks moved to it; `tensor-fork` and `tensor-gpu` 0.1.4.0 stay on 0.1.16.0 until their next versions. `make
   check-full` 101/101 with it; `reference/test_published.py` passes.
 
-## tensor-gpu: counter-based random fills (2026-10-27, not published)
+## tensor-gpu: counter-based random fills (2026-10-27, published as 0.1.5.0 on 2026-10-27)
 
 - Asked in bend-ml #23 (adeerkhan): a fill bang for uniform and Gaussian noise, so a generative training step does not
   make its noise on the host. `fill_uniform`, `fill_gauss`, `uniform_mat` and `gauss_mat` make n numbers of a counter s
   in one bang over `run1_new`, a lane a cell (uniform) or a pair of cells (Gaussian). Four defs outside the proofs,
-  pinned in `check_all.py` (58 in all). It would be `bend-ml-tensor-gpu@0.1.5.0`.
+  pinned in `check_all.py` (58 in all).
 - The words: the counter hash and the uniform are mlbend-generative 0.1.0.0's (the test checks 2^20 uniforms against its
   formula: 0 differ), Box-Muller over (2p, 2p + 1). ln, sin and cos are mine, in `+ - * /` and the exponent's bits
   (ln from atanh's series on [sqrt(1/2), sqrt(2)], sin and cos by Taylor on [0, π/4] from the angle's 24 bits, so the
@@ -1531,7 +1531,7 @@ through pull request #14 (CI green).
   every lane. `reference/test_published.py` now reads the tensor-array a published package imports from its published
   source, not the local one, so the published 0.1.4.0 is still checked against 0.1.16.0.
 
-## tensor-array: the law to_list_len and the empty to_list (bend-ml #22, 2026-10-27, not published)
+## tensor-array: the law to_list_len and the empty to_list (bend-ml #22, 2026-10-27, published as 0.1.18.0 on 2026-10-27)
 
 - Contributed by adeerkhan (pull request #22, related to #20), merged into `devel` on 2026-10-27.
 - The fix: `Mat.to_list` read `Nat.sub(r*c, 1) + 1` numbers, and `Nat.sub(0, 1)` is 0 on `Nat`, so a matrix with 0
@@ -1544,3 +1544,11 @@ through pull request #14 (CI green).
   NaN and a subnormal, word for word, and prints 0. A content law needs the checker to follow `Array.set`/`Array.get` on
   a neutral array, which Base has no lemma for (the same reason `leaf_len` and `band_len` count lists).
 - Every other def is 0.1.17.0's, so the products and the cross-entropy keep their bits.
+- Published: `bend-ml-tensor-array@0.1.18.0` `0xf4dfe0b415f12cd7b6b3e20aa7cc5aa0`, then
+  `bend-ml-tensor-gpu@0.1.5.0` `0x6538b6a56d11b5a4d65ef7d8b18c1f9f` with the fills and the offset fills, moved from
+  tensor-array 0.1.17.0 to 0.1.18.0 (through `scripts/gen_tensor_gpu.py`; the generated file changes only in that
+  import) so that every package in v1.8.0 uses one `Mat`. The products' bit tests and `fill.bend` pass unchanged on 1
+  and 16 threads, the GPU and the JS lane. `tensor-fork` 0.1.4.0 stays on 0.1.16.0. The demos and the benchmarks moved
+  to 0.1.18.0. `reference/test_published.py` now applies `to_list_len`, checks that a published 0 x 5 `Mat.to_list` is
+  empty (0.1.17.0 gives one number) and that a published `fill_gauss_at` at an odd offset sums like its cells. `make
+  check-full` 110/110; `scripts/check_rts.py` passes.
