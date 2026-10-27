@@ -1503,6 +1503,9 @@ through pull request #14 (CI green).
   1, 2, 7, 1000, 16389, 70001 and a 256 x 3072 Mat), the libm distances and the moments of 2^20 numbers; the same 13
   lines on 1 and 16 threads, on the GPU (RTX 4050) and on the JS lane. With libm's sin and cos put back in the leaf the
   GPU run differs (69,913 words of the Mat) and the CPU threads do not, so the test sees the GPU lane.
+- `reference/test_rng.py`: the same operations in NumPy's float32, in the same order, give the same words on 8,192
+  cells (4,096 from the bangs, 4,096 where the U32 indexes wrap), so a twin in Python can check the noise bit for bit.
+  It catches a changed sine coefficient (287 words) and a changed hash constant (all).
 - The issue's premise, checked on the noise alone: mlbend-generative's host path for the issue's size
   (`TA.Mat.from_list(256n, 3072n, G.noise_of(s, 786432n))`, compiled, one thread) took 233 M user instructions on
   2026-10-27, and `gauss_mat` with `+RTS --gpu off --threads 1 -RTS` 93 M (a checksum pass included in both). That is
