@@ -1463,7 +1463,7 @@ through pull request #14 (CI green).
   on the code around it; `memory/compiler-schedule-noise.md`). Time a change to a shared kernel in its biggest user
   before publishing it.
 
-## tensor-array: Mat.softmax_ce over the array (2026-10-26, not published)
+## tensor-array: Mat.softmax_ce over the array (2026-10-26, published as 0.1.17.0 on 2026-10-27)
 
 - MetalBend measured `Mat.softmax_ce` walking each row as a list five times, and the same operations over the array
   3.4x faster. `cea_rows` now does them in place with tail loops, in the list version's order (the max from the first
@@ -1478,4 +1478,11 @@ through pull request #14 (CI green).
 - Not done: the rows in parallel. tensor-array shares no array (no `Array.fork`), so each node of a fork tree would
   clone the whole matrix, and on a loop bound by memory the copies cost what the threads give back. BendTorch, the
   user with wide rows, has its own cross-entropy over arrays.
-- To publish as the next tensor-array version (Renan's call); the MNIST demo would move to it with no change in bits.
+- Timed on an idle machine (2026-10-27, 64 rows of 49,152 on 16 threads, alternated rounds): 0.137 s against
+  0.505 s for the published list version, 3.7x.
+- The rows in parallel were tried after all (`Mat.softmax_ce_par`, rows on up to 2^par tasks, the same bits on 1 and 16
+  threads): 0.139 s on 16 threads against the sequential 0.138, and 1.43x slower on one thread, because each half of the
+  fork tree copies its rows. Dropped.
+- Published: `bend-ml-tensor-array@0.1.17.0` `0x7a3ad9c30a648ef09dd908b6468f25ea`. The MNIST and GPT-2 demos and the
+  benchmarks moved to it; `tensor-fork` and `tensor-gpu` 0.1.4.0 stay on 0.1.16.0 until their next versions. `make
+  check-full` 101/101 with it; `reference/test_published.py` passes.
