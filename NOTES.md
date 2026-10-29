@@ -1552,3 +1552,10 @@ through pull request #14 (CI green).
   to 0.1.18.0. `reference/test_published.py` now applies `to_list_len`, checks that a published 0 x 5 `Mat.to_list` is
   empty (0.1.17.0 gives one number) and that a published `fill_gauss_at` at an odd offset sums like its cells. `make
   check-full` 110/110; `scripts/check_rts.py` passes.
+
+## bend-lint 0.1.1 (2026-10-28)
+
+- `package.json` asks for bend-lint ^0.1.1 and `bend-lint.json` for `bend-lint-rules@0.1.1.0`, which adds
+  `performance/template_value_field` (a value field of a record of functions that reads a template, rebuilt at every
+  use; found in BendTorch). It is on at upstream's severity, `information`. `make lint`: the same 44 findings as with
+  0.1.0 (file, line and rule), none from the new rule, so nothing new to measure.
