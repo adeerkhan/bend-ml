@@ -11,9 +11,10 @@
 # for k take different branches at some node before either reaches a leaf (Apart below). It is not "i and
 # k differ after the mask", because that is false on an unbalanced tree: Array.size follows the leftmost
 # path, so in ANode{ANode{ALeaf, ALeaf}, ALeaf} (size 4) the indices 2 and 3 differ but both reach the
-# last leaf, and a write at 2 changes what a read at 3 returns. On a perfect tree of
+# last leaf, and a write at 2 changes what a read at 3 returns (main prints it: 9.0). On a perfect tree of
 # 2^d leaves, which Array.new and literals build, the descents part exactly when the masked indices differ;
-# I have not proved that equivalence in Bend, since it needs lemmas about U32 bits.
+# I have not proved that equivalence in Bend, since it needs lemmas about U32 bits. For a concrete tree
+# Apart computes to Unit, so Unit{} proves it (use_other, and use_other2 with a subtree left abstract).
 #
 # Why the proofs are shaped this way: an Array is affine, and so is it inside a proof, so a proof may use a
 # given array once. The obvious lemmas each need the same subtree again (one to say Array.size of it is
@@ -441,9 +442,21 @@ def get_other_set(T, a, i, k, v, h):
 def use_it(a: Array<F32>) -> {Pair.snd(Array<F32>, F32, Array.get(F32, Array.set(F32, a, 13, 1.5), 13)) == 1.5 : F32}:
   get_after_set(F32, a, 13, 1.5)
 
+# get_other_set on the same 8 cells (13 wraps to 5, read at 2), and on a tree whose high half a is any
+# array: there Apart computes to Unit, so Unit{} proves it
+def use_other() -> {Pair.snd(Array<F32>, F32, Array.get(F32, Array.set(F32, [0.0 : F32*8n], 13, 1.5), 2)) == Pair.snd(Array<F32>, F32, Array.get(F32, [0.0 : F32*8n], 2)) : F32}:
+  get_other_set(F32, [0.0 : F32*8n], 13, 2, 1.5, Unit{})
+
+def use_other2(a: Array<F32>) -> {Pair.snd(Array<F32>, F32, Array.get(F32, Array.set(F32, ANode{ANode{ALeaf{0.0}, ALeaf{1.0}}, a}, 0, 1.5), 3)) == Pair.snd(Array<F32>, F32, Array.get(F32, ANode{ANode{ALeaf{0.0}, ALeaf{1.0}}, a}, 3)) : F32}:
+  get_other_set(F32, ANode{ANode{ALeaf{0.0}, ALeaf{1.0}}, a}, 0, 3, 1.5, Unit{})
+
 def second(r: Array<F32> & F32) -> F32:
   (b, x) = r
   x
 
-def main() -> F32:
-  second(Array.get(F32, Array.set(F32, [0.0 : F32*8n], 13, 1.5), 13))
+# 1.5 (get_after_set), 2.5 (get_other_set: the write at 13 leaves cell 2 alone), and 9.0: on the
+# unbalanced tree a write at 2 reaches the leaf a read at 3 finds, though 2 and 3 differ after the mask
+def main() -> F32 & F32 & F32:
+  (second(Array.get(F32, Array.set(F32, [0.0 : F32*8n], 13, 1.5), 13)),
+   second(Array.get(F32, Array.set(F32, Array.set(F32, [0.0 : F32*8n], 2, 2.5), 13, 1.5), 2)),
+   second(Array.get(F32, Array.set(F32, ANode{ANode{ALeaf{0.0}, ALeaf{1.0}}, ALeaf{2.0}}, 2, 9.0), 3)))
