@@ -1559,3 +1559,17 @@ through pull request #14 (CI green).
   `performance/template_value_field` (a value field of a record of functions that reads a template, rebuilt at every
   use; found in BendTorch). It is on at upstream's severity, `information`. `make lint`: the same 44 findings as with
   0.1.0 (file, line and rule), none from the new rule, so nothing new to measure.
+
+## tensor-array: three laws about Base's Array (bend-ml #26, 2026-10-29, on devel, not published)
+
+- `size_set`, `get_after_set` and `get_other_set` move from `docs/upstream/array_set_laws.bend` into
+  `tensor-array/main.bend`, with their helpers renamed `ASet.*` (three names, `G`, `K` and `second`, were already taken
+  there). The proofs are unchanged: one pass over the tree proves every fact the step needs at once, because a proof may
+  use an array only once. adeerkhan asked for them in #26; the round trip `Mat.to_list(Mat.of_list(xs)) == xs` on top
+  of them is his next PR. Upstream, bendlang/bend#1934 asks whether Base should state them itself.
+- `get_other_set`'s condition is `ASet.Apart` (the two descents split before a leaf), not "the masked indices differ",
+  which is false on an unbalanced tree. `tensor-array/tests/array_laws.bend` uses the laws on concrete trees and prints
+  `(1.5, 2.5, 9.0)`, the 9.0 being a write at 2 that a read at 3 sees. It runs on the JavaScript lane only: the C runtime
+  stops with `runtime fail-stop` on the hand-built unbalanced tree (the original file does the same).
+- `bend` and `bend --verdict` pass on `tensor-array/main.bend`; changing `size_set`'s right side to 0 makes `bend`
+  refuse it. Every other def is 0.1.18.0's, so no bits change.
