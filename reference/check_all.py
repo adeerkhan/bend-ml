@@ -170,6 +170,9 @@ def main():
         run(f"{f} must be a type error", [BEND, f], lambda o, c, m=msg: "SOME PROOFS FAIL" in o and m in o)
     run("tensor/tests/ok.bend compiles and runs", [BEND, "tensor/tests/ok.bend"], lambda o, c: "18 18 18 18" in o)
     run("tensor-array/tests/ok.bend compiles and runs", [BEND, "tensor-array/tests/ok.bend"], lambda o, c: o.strip() == "8n")
+    run("tensor-array/tests/array_laws.bend: the Array laws used, and the unbalanced tree's 9.0", [BEND, "tensor-array/tests/array_laws.bend"],
+        lambda o, c: c == 0 and o.strip() == "(1.5, 2.5, 9.0)")
+    run("tensor-array/tests/array_laws.bend --verdict", [BEND, "tensor-array/tests/array_laws.bend", "--verdict"], lambda o, c: o.strip().endswith("ALL PROOFS CHECK"))
     with tempfile.TemporaryDirectory() as d:
         roundtrip = os.path.join(d, "roundtrip")
         run("compile tensor-array/tests/roundtrip.bend", [BEND, "tensor-array/tests/roundtrip.bend", "-o", roundtrip])
