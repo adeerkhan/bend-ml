@@ -58,6 +58,7 @@ p(f"""# bend-ml-tensor-gpu: tensor-array's products on the GPU, with tensor-arra
 # a shared array, are @unsafe, and `bend main.bend` names every def that relies on them. Nothing checks that a leaf
 # writes only its own tile of C, or never writes A or B; the tiles are disjoint by construction (leaf t writes tile t).
 # All of it is Bend: no foreign code. Written by bend-ml's scripts/gen_tensor_gpu.py ({TM} x {TN} tiles).
+# bend-lint: disable-file bend-lint-rules/performance/gpu_fit -- the bangs carry the arrays to the device by design; that is the package not-expected-because: products timed on the GPU against --gpu off (8.4 against 12.2 ms, 11-13 against 55-56 ms, NOTES 2026-10-18); a caller whose kernel does not win runs the same bang with --gpu off
 import Base
 import bend-ml-tensor-array@0.1.18.0/main.bend as TA
 
