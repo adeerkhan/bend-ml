@@ -191,6 +191,7 @@ def mo_show(+gauss: Bool, m: Mo) -> String:
 
 @unsafe
 def stats(+gauss: Bool, +s: U32) -> String:
+  # bend-lint: disable-next bend-lint-rules/performance/eager_branch -- a one-shot test not-expected-because: two fills of 1M cells, tens of ms
   mo_show(gauss, mo_go(1024n, 0, Tuple{Bool.pick(Array<F32>, gauss, TG.fill_gauss(s, 1048576n, 20n), TG.fill_uniform(s, 1048576n, 20n)), Mo{0.0, 0.0, 0, 0, 0}}))
 
 @unsafe
