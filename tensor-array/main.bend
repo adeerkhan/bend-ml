@@ -528,6 +528,7 @@ def pow2(d: Nat) -> Nat:
     case 0n:
       1n
     case 1n++q:
+      # bend-lint: disable-next bend-lint-rules/performance/repeated_call -- pow2 appears only in proofs' types not-expected-because: the package never runs it (NOTES 2026-10-17)
       Nat.add(pow2(q), pow2(q))
 
 # smallest power of two >= n, by structural recursion on n: returns (depth, 2^depth)
@@ -1549,6 +1550,7 @@ def Bands.zeros(+d: Nat, +r: Nat, +c: Nat) -> Bands<r, c>:
     case 0n:
       BLeaf{Mat.zeros(r, c)}
     case 1n+q:
+      # bend-lint: disable-next bend-lint-rules/performance/missed_fork -- bands are built once at load not-expected-because: forking them measured as no change (NOTES 2026-10-16)
       BNode{Bands.zeros(q, half(r), c), Bands.zeros(q, Nat.sub(r, half(r)), c)}
 
 # the row counts of the two bands follow the row count of the node: if rr == r at run
@@ -1594,6 +1596,7 @@ def bfill(+c: Nat, -r: Nat, b: Bands<r, c>, l: Bool, rt: Bool, +rr: Nat, -e: {rr
     case BNode{x, y} False{} True{}:
       BNode{x, bfill(c, Nat.sub(r, half(r)), y, bfill_l(Nat.sub(rr, half(rr)), c, Nat.sub(i, Nat.mul(half(rr), c)), n), bfill_r(Nat.sub(rr, half(rr)), c, Nat.sub(i, Nat.mul(half(rr), c))), Nat.sub(rr, half(rr)), eq_rest(rr, r, e), Nat.sub(i, Nat.mul(half(rr), c)), n, xs)}
     case BNode{x, y} False{} False{}:
+      # bend-lint: disable-next bend-lint-rules/performance/missed_fork -- bands are built once at load not-expected-because: forking them measured as no change (NOTES 2026-10-16)
       BNode{bfill(c, half(r), x, bfill_l(half(rr), c, i, Nat.sub(Nat.mul(half(rr), c), i)), bfill_r(half(rr), c, i), half(rr), eq_half(rr, r, e), i, Nat.sub(Nat.mul(half(rr), c), i), xs), bfill(c, Nat.sub(r, half(r)), y, bfill_l(Nat.sub(rr, half(rr)), c, 0n, Nat.sub(n, Nat.sub(Nat.mul(half(rr), c), i))), bfill_r(Nat.sub(rr, half(rr)), c, 0n), Nat.sub(rr, half(rr)), eq_rest(rr, r, e), 0n, Nat.sub(n, Nat.sub(Nat.mul(half(rr), c), i)), List.drop(&2, F32, xs, Nat.sub(Nat.mul(half(rr), c), i)))}
 
 def bfill_top(ok: Bool, +r: Nat, +c: Nat, b: Bands<r, c>, +i: Nat, +n: Nat, +xs: List<&2, F32>) -> Bands<r, c>:
@@ -1735,6 +1738,7 @@ def blist(+c: Nat, -r: Nat, b: Bands<r, c>, +rr: Nat, -e: {rr == r : Nat}) -> BR
     case BLeaf{m}:
       brow_leaf(r, c, m, 0, Nat.mul(rr, c))
     case BNode{x, y}:
+      # bend-lint: disable-next bend-lint-rules/performance/missed_fork -- bands are built once at load not-expected-because: forking them measured as no change (NOTES 2026-10-16)
       bl_join(r, c, blist(c, half(r), x, half(rr), eq_half(rr, r, e)), blist(c, Nat.sub(r, half(r)), y, Nat.sub(rr, half(rr)), eq_rest(rr, r, e)))
 
 # all r*c numbers in row order (in BRow.row)
@@ -2136,6 +2140,7 @@ def ASet.side(-T: Data, a: Array<T>, +n: U32, +k: U32, +w: Bool) -> ASet.Side(T,
     case ALeaf{x}:
       ({==}, {==}, Unit{})
     case ANode{xs, ys}:
+      # bend-lint: disable-next bend-lint-rules/performance/missed_fork -- a proof by one pass over the tree not-expected-because: proofs are checked, never run
       ASet.side_node(T, xs, ys, n, k, w, ASet.side(T, xs, U32.shr(n), k, U32.is_lt(k, U32.shr(U32.shr(n)))), ASet.side(T, ys, U32.shr(n), U32.sub(k, U32.shr(n)), U32.is_lt(U32.sub(k, U32.shr(n)), U32.shr(U32.shr(n)))))
 
 # ASet.Reads: what one pass over the tree a proves about a write along (n, j, v, z) and a read along (n, k, w):

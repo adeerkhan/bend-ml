@@ -263,6 +263,7 @@ def side(-T: Data, a: Array<T>, +n: U32, +k: U32, +w: Bool) -> Side(T, a, n, k, 
     case ALeaf{x}:
       ({==}, {==}, Unit{})
     case ANode{xs, ys}:
+      # bend-lint: disable-next bend-lint-rules/performance/missed_fork -- a proof by one pass over the tree not-expected-because: proofs are checked, never run
       side_node(T, xs, ys, n, k, w, side(T, xs, U32.shr(n), k, U32.is_lt(k, U32.shr(U32.shr(n)))), side(T, ys, U32.shr(n), U32.sub(k, U32.shr(n)), U32.is_lt(U32.sub(k, U32.shr(n)), U32.shr(U32.shr(n)))))
 
 # Reads: what one pass over the tree a proves about a write along (n, j, v, z) and a read along (n, k, w):

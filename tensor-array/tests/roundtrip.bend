@@ -22,6 +22,7 @@ def same_list(+xs: List<&2, F32>, +ys: List<&2, F32>) -> Bool:
     case Nil{} Nil{}:
       True{}
     case Con{+h, +t} Con{+h2, +t2}:
+      # bend-lint: disable-next bend-lint-rules/performance/eager_branch -- a one-shot test not-expected-because: equal lists are walked to the end anyway
       Bool.and(U32.is_eq(bits(h), bits(h2)), same_list(t, t2))
     case _ _:
       False{}
