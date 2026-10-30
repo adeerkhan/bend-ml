@@ -1578,8 +1578,8 @@ through pull request #14 (CI green).
 
 - With 0.1.x in `node_modules` the rules no longer built (a type mismatch on the rule API), so `make lint` stopped
   before any finding; `package.json` asks for ^0.2.2 and `bend-lint.json` for `bend-lint-rules@0.2.2.0`.
-- 0.2.2 reports 49 findings: the 44 of 0.1.1, `gpu_fit` now on the eight `root1!`..`root4_new!` bangs of tensor-gpu as
-  well, and `missed_fork` on `ASet.side`, the laws added to tensor-array on 2026-10-29. None is taken: each was measured
+- 0.2.2 reports 49 findings (0.1.1: 44). New among them: `gpu_fit` on the eight `root1!`..`root4_new!` bangs of
+  tensor-gpu, and `missed_fork` on `ASet.side`, the laws added to tensor-array on 2026-10-29. None is taken: each was measured
   or explained in the 2026-10-16/17 passes, or sits in a proof, a benchmark (the repetition is what it measures), an
   upstream repro or a one-shot test. Each now carries a `disable` directive with its reason; tensor-gpu's comes from
   `scripts/gen_tensor_gpu.py`, which writes the file.
